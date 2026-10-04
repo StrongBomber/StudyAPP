@@ -129,17 +129,39 @@ aşınca kendini sıfırlar; tarayıcıdan doğrudan erişim `.htaccess` ile eng
 
 Canlı test `ZAMAN AŞIMI` veriyorsa süre ölçümlerine bakın:
 
-- `baglanti_sn` küçük (ör. 0.2) + `ilk_yanit_sn` = 0 → bağlantı kuruluyor ama
-  **model yanıt üretmiyor** (NVIDIA kuyruğu yoğun). Farklı bir modeli deneyin:
+- `baglanti_sn` küçük (ör. 0.2) + "0 bytes received" → bağlantı kuruluyor ama
+  **model yanıt üretmiyor** (NVIDIA kuyruğu yoğun). Çalışan bir model bulun:
 
-  ```text
-  .../api/nvidia.php?route=diag&live=1&model=meta/llama-3.1-8b-instruct
-  .../api/nvidia.php?route=diag&live=1&model=z-ai/glm-5.3-flash&timeout=120
-  ```
+  1. **Güncel model listesini görün** (hesabınızın gerçekten erişebildikleri):
 
-  Hızlı yanıt veren bir model bulunca yapılandırma dosyanızdaki
-  `NVIDIA_MODEL` değerini onunla değiştirin. Sohbet zaman aşımını da
-  `'NVIDIA_TIMEOUT' => 120` gibi bir satırla yükseltebilirsiniz.
+     ```text
+     .../api/nvidia.php?route=models
+     .../api/nvidia.php?route=models&q=flash      ← adında "flash" geçenler
+     .../api/nvidia.php?route=models&q=vision     ← görsel destekliler
+     ```
+
+  2. **Adayları canlı test edin** — uygulama ilk soruda sayfa görüntüsü
+     gönderdiği için `&vision=1` ile görsel desteğini de sınayın:
+
+     ```text
+     .../api/nvidia.php?route=diag&live=1&model=MODEL_ADI&vision=1
+     ```
+
+  3. Muhakemeli modellerde (GLM, Qwen...) düşünme modunu kapatmak yanıtı çok
+     hızlandırabilir: `&thinking=0` ekleyerek test edin; işe yararsa
+     yapılandırmaya `'NVIDIA_THINKING' => false` yazın.
+
+  4. Çalışan modeli yapılandırmada `NVIDIA_MODEL` yapın ve yoğunluğa karşı
+     **yedek zincir** tanımlayın — birincil model yanıt vermezse proxy
+     otomatik olarak sıradakini dener:
+
+     ```php
+     'NVIDIA_MODEL' => 'hizli-ve-vision-model',
+     'NVIDIA_FALLBACK_MODELS' => 'ikinci-model, ucuncu-model',
+     ```
+
+- HTTP **410** görürseniz model emekliye ayrılmıştır (`meta/llama-3.1-8b`
+  gibi) — `?route=models` listesinden güncel bir model seçin.
 - `baglanti_sn` = 0 ve cURL hatası bağlantıya işaret ediyor → hosting dışa
   giden isteği engelliyor; `son_kayitlar` ve `curl_hata` metnini not alın.
 

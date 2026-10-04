@@ -62,6 +62,8 @@ function load_config(): array
     $apiKey = '';
     $model = '';
     $timeout = 0;
+    $fallbacks = '';
+    $thinking = null;
 
     $aboveRoot = dirname(__DIR__, 2) . '/nvidia-config.php';
     $local = __DIR__ . '/config.php';
@@ -78,6 +80,12 @@ function load_config(): array
                 }
                 if ($timeout === 0 && isset($cfg['NVIDIA_TIMEOUT'])) {
                     $timeout = (int) $cfg['NVIDIA_TIMEOUT'];
+                }
+                if ($fallbacks === '' && isset($cfg['NVIDIA_FALLBACK_MODELS'])) {
+                    $fallbacks = trim((string) $cfg['NVIDIA_FALLBACK_MODELS']);
+                }
+                if ($thinking === null && array_key_exists('NVIDIA_THINKING', $cfg)) {
+                    $thinking = (bool) $cfg['NVIDIA_THINKING'];
                 }
             }
         }
@@ -98,20 +106,37 @@ function load_config(): array
     if ($timeout < 10 || $timeout > 300) {
         $timeout = 90;
     }
+    if ($fallbacks === '') {
+        $fallbacks = trim((string) (getenv('NVIDIA_FALLBACK_MODELS') ?: ''));
+    }
 
-    return ['api_key' => $apiKey, 'model' => $model, 'timeout' => $timeout];
+    $fallbackList = [];
+    foreach (explode(',', $fallbacks) as $candidate) {
+        $candidate = trim($candidate);
+        if ($candidate !== '' && $candidate !== $model && preg_match('~^[\w.\-/]{1,120}$~', $candidate)) {
+            $fallbackList[] = $candidate;
+        }
+    }
+
+    return [
+        'api_key' => $apiKey,
+        'model' => $model,
+        'timeout' => $timeout,
+        'fallback_models' => array_values(array_unique($fallbackList)),
+        'thinking' => $thinking,
+    ];
 }
 
 function detect_route(): string
 {
     // ?route=... works even when .htaccess rewriting is unavailable.
     $route = $_GET['route'] ?? '';
-    if (in_array($route, ['status', 'chat', 'test', 'diag'], true)) {
+    if (in_array($route, ['status', 'chat', 'test', 'diag', 'models'], true)) {
         return $route;
     }
     $uri = $_SERVER['REQUEST_URI'] ?? '';
     $path = (string) parse_url($uri, PHP_URL_PATH);
-    if (preg_match('~/api/nvidia/(status|chat|test|diag)/?$~', $path, $m)) {
+    if (preg_match('~/api/nvidia/(status|chat|test|diag|models)/?$~', $path, $m)) {
         return $m[1];
     }
     return '';
@@ -265,6 +290,25 @@ function read_payload(): array
     return $payload;
 }
 
+/** Sohbet isteği gövdesini kurar; thinking ayarı varsa chat_template_kwargs ekler. */
+function build_chat_body(string $model, array $messages, float $temperature, float $topP, int $maxTokens, ?bool $thinking): ?string
+{
+    $payload = [
+        'model' => $model,
+        'messages' => $messages,
+        'temperature' => $temperature,
+        'top_p' => $topP,
+        'max_tokens' => $maxTokens,
+        'stream' => false,
+    ];
+    if ($thinking !== null) {
+        // Muhakemeli modellerde (GLM, Qwen vb.) düşünme modunu aç/kapat.
+        $payload['chat_template_kwargs'] = ['thinking' => $thinking];
+    }
+    $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    return $encoded === false ? null : $encoded;
+}
+
 function provider_error_message(int $status, string $model): string
 {
     if ($status === 401 || $status === 403) {
@@ -272,6 +316,9 @@ function provider_error_message(int $status, string $model): string
     }
     if ($status === 404) {
         return "NVIDIA endpoint bu modeli bulamadı: {$model}. NVIDIA_MODEL ayarını kontrol et.";
+    }
+    if ($status === 410) {
+        return "Bu model artık sunulmuyor (emekliye ayrılmış): {$model}. /api/nvidia.php?route=models adresinden güncel bir model seçip NVIDIA_MODEL ayarını değiştir.";
     }
     if ($status === 429) {
         return 'NVIDIA API hız sınırı veya kullanım kotasına ulaşıldı. Biraz bekleyip tekrar dene.';
@@ -329,52 +376,70 @@ function handle_chat(bool $test, array $config): void
         json_out(400, ['error' => ['message' => 'Model ayarları izin verilen aralığın dışında.']]);
     }
 
-    $body = json_encode([
-        'model' => $model,
-        'messages' => $messages,
-        'temperature' => $temperature,
-        'top_p' => $topP,
-        'max_tokens' => $maxTokens,
-        'stream' => false,
-    ], JSON_UNESCAPED_UNICODE);
+    // ---- Model zinciri: birincil model + yapılandırılmış yedekler ----------
+    $chain = array_merge([$model], $config['fallback_models']);
+    $chain = array_values(array_unique($chain));
+    // Zincir birden fazlaysa her denemeye süre sınırı koy ki toplam,
+    // ön yüzün 150 sn'lik iptal sınırını aşmasın.
+    $perAttemptTimeout = $test ? 60 : (count($chain) > 1 ? min($config['timeout'], 55) : $config['timeout']);
 
-    $res = curl_nvidia_request(NVIDIA_CHAT_URL, [
-        'Content-Type: application/json',
-        'Accept: application/json',
-        'Authorization: Bearer ' . $config['api_key'],
-    ], $body, $test ? 60 : $config['timeout']);
+    $res = null;
+    $usedModel = $model;
+    foreach ($chain as $attemptIndex => $attemptModel) {
+        $body = build_chat_body($attemptModel, $messages, $temperature, $topP, $maxTokens, $config['thinking']);
 
-    // ---- Hata ayıklama günlüğü (anahtar ve sohbet içeriği YOK) ----
-    $logEntry = [
-        'uc' => $test ? 'test' : 'chat',
-        'model' => $model,
-        'http' => $res['http'],
-        'curl_hata_no' => $res['errno'],
-        'curl_hata' => $res['error'],
-        'dns_sn' => $res['dns_sn'],
-        'baglanti_sn' => $res['baglanti_sn'],
-        'ssl_sn' => $res['ssl_sn'],
-        'ilk_yanit_sn' => $res['ilk_yanit_sn'],
-        'toplam_sn' => $res['toplam_sn'],
-        'ip' => $res['ip'],
-        'ssl_dogrulama_atlandi' => $res['ssl_fallback'],
-        'mesaj_sayisi' => count($messages),
-        'istek_boyutu_bayt' => strlen((string) $body),
-        'zaman_asimi_siniri_sn' => $test ? 60 : $config['timeout'],
-    ];
-    if ($res['http'] !== 200) {
-        $logEntry['saglayici_hata'] = extract_provider_error($res['body']);
+        $res = curl_nvidia_request(NVIDIA_CHAT_URL, [
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $config['api_key'],
+        ], $body, $perAttemptTimeout);
+        $usedModel = $attemptModel;
+
+        // ---- Hata ayıklama günlüğü (anahtar ve sohbet içeriği YOK) ----
+        $logEntry = [
+            'uc' => $test ? 'test' : 'chat',
+            'model' => $attemptModel,
+            'deneme' => ($attemptIndex + 1) . '/' . count($chain),
+            'http' => $res['http'],
+            'curl_hata_no' => $res['errno'],
+            'curl_hata' => $res['error'],
+            'dns_sn' => $res['dns_sn'],
+            'baglanti_sn' => $res['baglanti_sn'],
+            'ssl_sn' => $res['ssl_sn'],
+            'ilk_yanit_sn' => $res['ilk_yanit_sn'],
+            'toplam_sn' => $res['toplam_sn'],
+            'ip' => $res['ip'],
+            'ssl_dogrulama_atlandi' => $res['ssl_fallback'],
+            'mesaj_sayisi' => count($messages),
+            'istek_boyutu_bayt' => strlen((string) $body),
+            'zaman_asimi_siniri_sn' => $perAttemptTimeout,
+        ];
+        if ($res['http'] !== 200) {
+            $logEntry['saglayici_hata'] = extract_provider_error($res['body']);
+        }
+        debug_log($logEntry);
+
+        if ($res['http'] === 200) {
+            break; // başarı — zinciri durdur
+        }
+
+        // Yedeğe geçilebilir durumlar: zaman aşımı/bağlantı hatası veya
+        // modele özgü geçici/kalıcı servis hataları. Anahtar/istek hataları
+        // (400, 401, 403, 413, 422) yedek modelle de düzelmez → zinciri kes.
+        $retryable = $res['errno'] !== 0
+            || in_array($res['http'], [404, 408, 409, 410, 429, 500, 502, 503, 504], true);
+        if (!$retryable) {
+            break;
+        }
     }
-    debug_log($logEntry);
 
     if ($res['body'] === false || $res['errno'] !== 0) {
         $detail = $res['error'] !== '' ? $res['error'] : ('curl hata ' . $res['errno']);
+        $chainNote = count($chain) > 1 ? ' (yedek modeller de denendi)' : '';
         if ($res['errno'] === 28) {
-            $hint = $res['ilk_yanit_sn'] > 0
-                ? 'NVIDIA yanıt üretmeye başladı ama süre sınırına takıldı. Biraz bekleyip tekrar dene.'
-                : 'NVIDIA ' . $logEntry['zaman_asimi_siniri_sn'] . ' sn içinde yanıt vermedi (model kuyruğu yoğun olabilir). Biraz bekleyip tekrar dene; sorun sürerse diag sayfasından farklı bir modeli test et.';
+            $hint = 'NVIDIA ' . $perAttemptTimeout . ' sn içinde yanıt vermedi' . $chainNote . ' — model kuyruğu yoğun olabilir. Biraz bekleyip tekrar dene; sorun sürerse diag sayfasından farklı bir modeli test et.';
         } else {
-            $hint = 'NVIDIA servisine ulaşılamadı (' . $detail . '). Ayrıntılar için /api/nvidia.php?route=diag adresine bak.';
+            $hint = 'NVIDIA servisine ulaşılamadı (' . $detail . ')' . $chainNote . '. Ayrıntılar için /api/nvidia.php?route=diag adresine bak.';
         }
         json_out(502, ['error' => ['message' => $hint]]);
     }
@@ -394,15 +459,52 @@ function handle_chat(bool $test, array $config): void
         if (!is_string($text)) {
             $text = '';
         }
-        json_out(200, ['text' => $text, 'model' => $model]);
+        json_out(200, ['text' => $text, 'model' => $usedModel]);
     }
 
     $status = $res['http'];
-    $allowed = [400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504];
+    $allowed = [400, 401, 403, 404, 408, 409, 410, 413, 422, 429, 500, 502, 503, 504];
     if (!in_array($status, $allowed, true)) {
         $status = 502;
     }
-    json_out($status, ['error' => ['message' => provider_error_message($status, $model)]]);
+    json_out($status, ['error' => ['message' => provider_error_message($status, $usedModel)]]);
+}
+
+/**
+ * Model listesi: /api/nvidia.php?route=models
+ *   &q=flash   yalnızca adı eşleşenleri göster (örn. flash, vision, nemotron)
+ * NVIDIA hesabınızın şu anda erişebildiği modellerin kimliklerini döndürür.
+ */
+function handle_models(array $config): void
+{
+    $headers = ['Accept: application/json'];
+    if ($config['api_key'] !== '') {
+        $headers[] = 'Authorization: Bearer ' . $config['api_key'];
+    }
+    $res = curl_nvidia_request(NVIDIA_BASE_URL . '/models', $headers, null, 20);
+    if ($res['body'] === false || $res['http'] !== 200) {
+        json_out(502, ['error' => [
+            'message' => 'Model listesi alınamadı (HTTP ' . $res['http'] . ', curl ' . $res['errno'] . ': ' . $res['error'] . ').',
+        ]]);
+    }
+    $data = json_decode((string) $res['body'], true);
+    $ids = [];
+    foreach ((array) ($data['data'] ?? []) as $item) {
+        if (is_array($item) && isset($item['id']) && is_string($item['id'])) {
+            $ids[] = $item['id'];
+        }
+    }
+    sort($ids, SORT_STRING | SORT_FLAG_CASE);
+    $query = trim((string) ($_GET['q'] ?? ''));
+    if ($query !== '') {
+        $ids = array_values(array_filter($ids, static fn (string $id): bool => stripos($id, $query) !== false));
+    }
+    json_out(200, [
+        'toplam' => count($ids),
+        'filtre' => $query === '' ? null : $query,
+        'ipucu' => 'Bir modeli denemek için: ?route=diag&live=1&model=MODEL_ADI — görsel desteğini de test etmek için &vision=1 ekleyin.',
+        'modeller' => $ids,
+    ]);
 }
 
 /**
@@ -410,6 +512,9 @@ function handle_chat(bool $test, array $config): void
  *   &live=1        gerçek (küçük) sohbet isteği de çalıştır
  *   &model=...     canlı testte farklı bir modeli dene (yalnızca teşhis için)
  *   &timeout=NN    canlı test süre sınırı, 20-120 sn (varsayılan 60)
+ *   &vision=1      canlı teste küçük bir görsel ekle (görüntü desteğini sınar
+ *                  — uygulama ilk soruda sayfa görüntüsü gönderir!)
+ *   &thinking=0|1  muhakemeli modellerde düşünme modunu kapatıp/açıp dene
  */
 function handle_diag(array $config): void
 {
@@ -478,13 +583,37 @@ function handle_diag(array $config): void
         $liveTimeout = (int) ($_GET['timeout'] ?? 60);
         $liveTimeout = max(20, min(120, $liveTimeout));
 
-        $body = json_encode([
+        $useVision = isset($_GET['vision']);
+        if ($useVision) {
+            // 1x1 kırmızı PNG — modelin görüntü girdisini kabul edip etmediğini sınar.
+            $pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+            $liveMessages = [[
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'text', 'text' => 'What color is this image? Answer with one word.'],
+                    ['type' => 'image_url', 'image_url' => ['url' => $pixel]],
+                ],
+            ]];
+        } else {
+            $liveMessages = [['role' => 'user', 'content' => 'Say OK']];
+        }
+
+        $liveThinking = null;
+        if (isset($_GET['thinking'])) {
+            $liveThinking = ((string) $_GET['thinking']) === '1';
+        }
+
+        $livePayload = [
             'model' => $liveModel,
-            'messages' => [['role' => 'user', 'content' => 'Say OK']],
-            'max_tokens' => 16,
+            'messages' => $liveMessages,
+            'max_tokens' => 64,
             'temperature' => 0,
             'stream' => false,
-        ]);
+        ];
+        if ($liveThinking !== null) {
+            $livePayload['chat_template_kwargs'] = ['thinking' => $liveThinking];
+        }
+        $body = json_encode($livePayload);
         $live = curl_nvidia_request(NVIDIA_CHAT_URL, [
             'Content-Type: application/json',
             'Accept: application/json',
@@ -493,6 +622,8 @@ function handle_diag(array $config): void
 
         $report['canli_test'] = [
             'model' => $liveModel,
+            'gorsel_testi' => $useVision,
+            'thinking_ayari' => $liveThinking,
             'zaman_asimi_siniri_sn' => $liveTimeout,
             'http_durumu' => $live['http'],
             'curl_hata_kodu' => $live['errno'],
@@ -510,6 +641,8 @@ function handle_diag(array $config): void
         debug_log([
             'uc' => 'diag-live',
             'model' => $liveModel,
+            'gorsel_testi' => $useVision,
+            'thinking_ayari' => $liveThinking,
             'http' => $live['http'],
             'curl_hata_no' => $live['errno'],
             'curl_hata' => $live['error'],
@@ -520,16 +653,29 @@ function handle_diag(array $config): void
         ]);
 
         if ($live['http'] === 200) {
-            $report['sonuc'] = 'BAŞARILI: ' . $liveModel . ' modeli ' . $live['toplam_sn'] . ' sn içinde yanıt verdi. Anahtar ve bağlantı çalışıyor.';
+            $answer = '';
+            $liveData = json_decode((string) $live['body'], true);
+            if (is_array($liveData)) {
+                $liveMsg = $liveData['choices'][0]['message'] ?? [];
+                $answer = is_string($liveMsg['content'] ?? null) ? trim($liveMsg['content']) : '';
+                if ($answer === '' && is_string($liveMsg['reasoning_content'] ?? null)) {
+                    $answer = '(reasoning) ' . trim($liveMsg['reasoning_content']);
+                }
+            }
+            $answer = function_exists('mb_substr') ? mb_substr($answer, 0, 120) : substr($answer, 0, 120);
+            $report['canli_test']['model_yaniti'] = $answer;
+            $report['sonuc'] = 'BAŞARILI: ' . $liveModel . ' modeli ' . $live['toplam_sn'] . ' sn içinde yanıt verdi'
+                . ($useVision ? ' (görsel girdi kabul edildi)' : '')
+                . '. Bu modeli kullanmak için yapılandırmada NVIDIA_MODEL değerini güncelleyin.';
         } elseif ($live['errno'] === 28) {
-            $report['sonuc'] = 'ZAMAN AŞIMI: Bağlantı kuruldu (' . $live['baglanti_sn'] . ' sn) ama ' . $liveModel . ' modeli ' . $liveTimeout . ' sn içinde yanıt üretmedi. Model kuyruğu yoğun olabilir. Deneyin: &model=meta/llama-3.1-8b-instruct gibi hızlı bir modelle tekrar test edin; o çalışıyorsa sorun modelin yoğunluğudur — yapılandırmada NVIDIA_MODEL değerini değiştirin.';
+            $report['sonuc'] = 'ZAMAN AŞIMI: Bağlantı kuruldu (' . $live['baglanti_sn'] . ' sn) ama ' . $liveModel . ' modeli ' . $liveTimeout . ' sn içinde yanıt üretmedi. Model kuyruğu yoğun olabilir. ?route=models&q=flash ile güncel model listesine bakın ve &model=... ile hızlı bir modeli test edin; muhakemeli modellerde &thinking=0 da deneyin.';
         } elseif ($live['errno'] !== 0) {
             $report['sonuc'] = 'HATA: cURL ' . $live['errno'] . ' — ' . $live['error'];
         } else {
             $report['sonuc'] = 'HATA: NVIDIA ' . $live['http'] . ' döndürdü (401/403 = anahtar geçersiz, 404 = model adı yanlış, 429 = kota). Ayrıntı: ' . $report['canli_test']['saglayici_yanit_ozeti'];
         }
     } else {
-        $report['sonuc'] = 'Bağlantı ve anahtar hazır görünüyor. Gerçek istekle denemek için adrese &live=1 ekle. Farklı model denemek için &live=1&model=MODEL_ADI kullan.';
+        $report['sonuc'] = 'Bağlantı ve anahtar hazır görünüyor. Gerçek istekle denemek için adrese &live=1 ekle. Güncel model listesi: ?route=models — farklı model denemek için &live=1&model=MODEL_ADI, görsel desteği için &vision=1, muhakeme kapatmak için &thinking=0 kullan.';
     }
 
     $report['son_kayitlar'] = read_debug_tail();
@@ -544,6 +690,10 @@ $config = load_config();
 
 if ($route === 'diag') {
     handle_diag($config);
+}
+
+if ($route === 'models') {
+    handle_models($config);
 }
 
 if ($route === 'status') {
