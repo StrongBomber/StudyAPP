@@ -1,0 +1,2 @@
+# PDF.js is loaded as browser ES modules; ensure InfinityFree serves .mjs with a JavaScript MIME type.
+AddType text/javascript .mjs

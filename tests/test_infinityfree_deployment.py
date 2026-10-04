@@ -20,6 +20,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
             for relative_path in (
+                ".htaccess",
                 "index.html",
                 "assets/demo.pdf",
                 "vendor/pdf.min.mjs",
@@ -31,6 +32,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
             ):
                 self.assertTrue((output / relative_path).is_file(), relative_path)
 
+            self.assertIn("AddType text/javascript .mjs", (output / ".htaccess").read_text())
             self.assertFalse((output / "server.py").exists())
             self.assertFalse((output / "requirements.txt").exists())
             self.assertFalse((output / "api/nvidia/config.php").exists())

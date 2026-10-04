@@ -30,6 +30,7 @@ InfinityFree File Manager veya FTP ile seçtiğin alan adının `htdocs/` web k�
 
 ```text
 htdocs/
+├── .htaccess               # PDF.js .mjs modüllerine JavaScript MIME türü verir
 ├── index.html
 ├── assets/demo.pdf
 ├── vendor/
@@ -66,7 +67,7 @@ Anahtar girildikten sonra sayfayı yenile ve asistanı aç. PHP cURL dış NVIDI
 ## Sık karşılaşılan sorunlar
 
 - **Ana sayfa açılmıyor:** `index.html` doğrudan `htdocs/` içinde olmalı; `htdocs/proje/index.html` içine yüklediysen adresin de `/proje/` olmalıdır. Önerilen kurulum dosyaları doğrudan web köküne koyar.
-- **PDF.js/font dosyaları yüklenmiyor:** `vendor/` klasörünü ve alt klasörlerini eksiksiz yükle; FTP’de ikili dosyaları ASCII modunda aktarma.
+- **Arayüz tepkisiz veya PDF.js yüklenmiyor:** `htdocs/.htaccess` dosyasının yüklendiğini doğrula; bu dosya InfinityFree’de PDF.js’in `.mjs` dosyalarının JavaScript modülü olarak sunulmasını sağlar. Ayrıca `vendor/` klasörünü ve alt klasörlerini eksiksiz yükle; FTP’de ikili dosyaları ASCII modunda aktarma.
 - **Asistan “bağlı değil” diyor:** İlk kurulumda bu beklenir. `api/nvidia/config.php` var mı, `enabled` `true` mu, key doğru mu ve site aynı HTTPS alan adında mı kontrol et.
 - **AI isteğinde 403/502:** InfinityFree dış API’lere giden site isteklerine izin verdiğini belirtir; ancak aynı siteye farklı bir host adıyla (`www` ve `www` olmayan alan adı gibi) çapraz istek gönderme. Siteyi ve API’yi tek bir HTTPS host adı üzerinden kullan. Sunucu tarafı PHP cURL veya NVIDIA erişimi hosting hesabında çalışmıyorsa AI özelliğini başka bir backend’de barındırmak gerekir.
 - **Harici mobil uygulamadan API kullanımı:** InfinityFree ücretsiz planı genel API hostingi ve çapraz alan adı isteklerini kısıtlar. Bu dağıtım yalnızca aynı web sitesini ziyaret eden tarayıcı içindir.
