@@ -1,0 +1,51 @@
+# Çözüm — PDF çalışma alanı · Apache / InfinityFree yapılandırması
+
+# ---- API yönlendirmesi ------------------------------------------------------
+# /api/nvidia/status|chat|test isteklerini PHP proxy'sine yönlendir.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # HTTPS'e zorla (InfinityFree ücretsiz SSL kurduktan sonra etkindir).
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+  RewriteRule ^api/nvidia/(status|chat|test)/?$ api/nvidia.php?route=$1 [L,QSA]
+</IfModule>
+
+# ---- Varsayılan sayfa ---------------------------------------------------------
+DirectoryIndex index.html index.php
+
+# ---- MIME türleri -------------------------------------------------------------
+# PDF.js ES modülleri (.mjs) ve KaTeX fontları doğru türle sunulmalı.
+<IfModule mod_mime.c>
+  AddType text/javascript .mjs
+  AddType font/woff2 .woff2
+  AddType font/woff .woff
+  AddType font/ttf .ttf
+  AddType application/pdf .pdf
+</IfModule>
+
+# ---- Gizli / gereksiz dosyaları engelle ---------------------------------------
+<FilesMatch "^(config\.php|config\.sample\.php|server\.py|requirements\.txt|make-demo\.cjs|\.gitignore|\.gitattributes)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# ---- Önbellekleme -------------------------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/javascript "access plus 30 days"
+  ExpiresByType application/javascript "access plus 30 days"
+  ExpiresByType text/css "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 365 days"
+  ExpiresByType font/woff "access plus 365 days"
+  ExpiresByType font/ttf "access plus 365 days"
+  ExpiresByType application/pdf "access plus 7 days"
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>

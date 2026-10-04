@@ -1,0 +1,114 @@
+# InfinityFree'ye Yayınlama Kılavuzu
+
+Bu proje InfinityFree'de çalışacak şekilde hazırlandı. InfinityFree **Python
+çalıştırmaz**; bu yüzden `server.py`'deki NVIDIA proxy'si birebir PHP'ye port
+edildi (`api/nvidia.php`). Ön yüz (`index.html`) hiçbir değişiklik gerektirmez —
+aynı `/api/nvidia/...` yollarını `.htaccess` yönlendirmesi PHP'ye bağlar.
+
+```text
+Tarayıcı ──► index.html (statik, PDF + çizim tamamen istemci tarafı)
+         ──► /api/nvidia/status|chat|test ──► .htaccess ──► api/nvidia.php ──► NVIDIA NIM
+```
+
+## 1. Yüklenecek dosyalar
+
+`htdocs/` klasörüne şunları yükleyin (FTP veya InfinityFree Dosya Yöneticisi):
+
+```text
+htdocs/
+├── index.html
+├── .htaccess
+├── api/
+│   ├── nvidia.php
+│   ├── .htaccess
+│   └── config.sample.php
+├── assets/demo.pdf
+└── vendor/            (tamamı: pdf.min.mjs, pdf.worker.min.mjs, pdf-lib.min.js, katex/)
+```
+
+Hazır paket oluşturmak için (yerelde, Bash):
+
+```bash
+./make-infinityfree-package.sh
+# → dist/infinityfree-upload.zip  — içeriğini htdocs'a çıkarın
+```
+
+> InfinityFree Dosya Yöneticisi zip'i sunucuda çıkarabilir; FTP için
+> [FileZilla](https://filezilla-project.org/) önerilir (hesap FTP bilgileri
+> InfinityFree kontrol panelinde yazar).
+
+Yüklemeyin: `server.py`, `requirements.txt`, `tests/`, `make-demo.cjs`,
+`.github/` — bunlar yalnızca yerel geliştirme/CI içindir. (Yanlışlıkla
+yüklenirlerse `.htaccess` zaten `server.py` ve `requirements.txt` erişimini
+engeller.)
+
+## 2. SSL (HTTPS) kurulumu
+
+1. InfinityFree kontrol panelinde **Free SSL Certificates** bölümünden
+   domain'iniz için sertifika isteyin (Let's Encrypt / GoGetSSL).
+2. İstenen CNAME kaydını panel üzerinden onaylayın ve sertifikayı kurun.
+3. Kökteki `.htaccess` HTTPS yönlendirmesini zaten içeriyor; sertifika aktif
+   olunca site otomatik olarak HTTPS'e yönlenir.
+
+> SSL kurulumunu yapana kadar yönlendirme sorun çıkarırsa `.htaccess` içindeki
+> üç satırlık HTTPS bloğunun başına `#` koyarak geçici olarak kapatabilirsiniz.
+
+## 3. Yapay zekâ asistanını etkinleştirme (isteğe bağlı)
+
+Asistan olmadan da uygulama tamamen çalışır (PDF açma, çizim, kayıt). Asistan
+için NVIDIA NIM anahtarı gerekir:
+
+1. `api/config.sample.php` dosyasını kopyalayın.
+2. **Önerilen:** Kopyayı `htdocs`'un BİR ÜSTÜNDEKİ klasöre `nvidia-config.php`
+   adıyla koyun (InfinityFree'de `htdocs` ile aynı seviyede, web'den erişilemez):
+
+   ```text
+   /home/volXX/epiz_XXXXXX/
+   ├── nvidia-config.php     ← anahtar burada (web kökü DIŞINDA)
+   └── htdocs/
+       └── ...
+   ```
+
+   **Alternatif:** `htdocs/api/config.php` adıyla koyun — `api/.htaccess`
+   doğrudan erişimi engeller.
+3. Dosyadaki `NVIDIA_API_KEY` değerine anahtarınızı yazın.
+4. Kontrol: `https://alanadiniz.com/api/nvidia/status` →
+   `{"configured":true,"model":"z-ai/glm-5.3-flash"}` dönmelidir.
+
+**Anahtarı asla** `index.html`'e, JavaScript'e veya Git deposuna koymayın.
+(`.gitignore` `api/config.php` ve `nvidia-config.php`'yi zaten hariç tutar.)
+
+## 4. InfinityFree sınırlamaları ve bilinmesi gerekenler
+
+| Konu | Durum |
+| --- | --- |
+| Python | Yok — proxy bu yüzden PHP'ye port edildi. |
+| PHP sürümü | 8.x; `curl` ve `json` eklentileri mevcut, proxy bunları kullanır. |
+| Çalışma süresi | PHP betikleri için süre sınırı vardır. Uzun yanıtlar zaman aşımına uğrarsa asistan otomatik yeniden dener; sorun sürerse `nvidia-config.php` ile daha hızlı bir model seçin. |
+| İstek boyutu | InfinityFree POST limiti (~10 MB) uygulamanın gönderdiği küçültülmüş sayfa görüntüleri için fazlasıyla yeterlidir. |
+| Güvenlik sistemi | InfinityFree istekleri tarayıcı doğrulamasından (çerez) geçirir. Site içi `fetch` çağrıları sorunsuz çalışır; ancak `curl` gibi harici araçlarla API'yi test etmek bu yüzden başarısız olabilir — testi tarayıcıdan yapın. |
+| Node.js / npm | Gerekmez — `vendor/` altındaki dosyalar derlemesiz kullanılır. |
+
+## 5. Yayın sonrası kontrol listesi
+
+- [ ] `https://alanadiniz.com/` → uygulama açılıyor
+- [ ] "Örnek PDF" açılıyor (`assets/demo.pdf` yüklendi mi?)
+- [ ] PDF üzerine çizim yapılıp sayfa değiştirince korunuyor (IndexedDB)
+- [ ] `vendor/` tam yüklendi mi? (Sayfa boşsa eksik `pdf.min.mjs` olabilir —
+      tarayıcı konsolunda 404 kontrol edin)
+- [ ] `/api/nvidia/status` doğru JSON dönüyor
+- [ ] Anahtar girildiyse asistan sohbeti yanıt veriyor
+
+## Sorun giderme
+
+- **Sayfa açılıyor ama PDF yüklenmiyor:** `vendor/pdf.min.mjs` ve
+  `vendor/pdf.worker.min.mjs` yüklendiğinden ve `.htaccess`'in kökte olduğundan
+  emin olun (`.mjs` MIME türünü `.htaccess` ayarlar). FTP istemcinizde gizli
+  dosyaları (`.htaccess`) göstermeyi açmayı unutmayın.
+- **`/api/nvidia/status` 404 dönüyor:** Kök `.htaccess` yüklenmemiş veya
+  `api/nvidia.php` eksik. Geçici test: `https://alanadiniz.com/api/nvidia.php?route=status`.
+- **Asistan "anahtar ayarlı değil" diyor:** `nvidia-config.php` yanlış yerde
+  olabilir — `htdocs` ile AYNI seviyede (içinde değil) olmalı; ya da
+  `htdocs/api/config.php` olarak koyun.
+- **Asistan zaman aşımına uğruyor:** Ücretsiz hostingde uzun AI yanıtları
+  kesilebilir; tekrar deneyin veya daha kısa soru sorun.
