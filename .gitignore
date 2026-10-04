@@ -4,6 +4,9 @@
 api/config.php
 nvidia-config.php
 
+# Sunucuda üretilen hata ayıklama günlüğü
+api/debug.log
+
 # Editör ve işletim sistemi dosyaları
 .DS_Store
 Thumbs.db

@@ -17,5 +17,11 @@ return [
     'NVIDIA_API_KEY' => '',
 
     // İsteğe bağlı: farklı bir model kullanmak isterseniz değiştirin.
+    // Varsayılan model yoğun saatlerde yavaşsa diag sayfasında
+    // &live=1&model=... ile hızlı bir model bulup buraya yazın.
     'NVIDIA_MODEL' => 'z-ai/glm-5.3-flash',
+
+    // İsteğe bağlı: sohbet isteği zaman aşımı (saniye, 10-300 arası).
+    // Yorum satırını kaldırıp değeri değiştirebilirsiniz; varsayılan 90.
+    // 'NVIDIA_TIMEOUT' => 90,
 ];

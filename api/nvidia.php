@@ -2,16 +2,23 @@
 /**
  * NVIDIA NIM chat proxy for PHP hosting (InfinityFree compatible).
  *
- * PHP port of server.py's /api/nvidia/* endpoints so the app can run on
- * hosts that support PHP but not Python. Routes (via root .htaccess):
- *   GET  /api/nvidia/status
- *   POST /api/nvidia/chat
- *   POST /api/nvidia/test
+ * Routes (via root .htaccess, or directly as /api/nvidia.php?route=...):
+ *   GET  /api/nvidia/status   — anahtar yapılandırılmış mı?
+ *   POST /api/nvidia/chat     — sohbet isteği
+ *   POST /api/nvidia/test     — küçük doğrulama isteği
+ *   GET  /api/nvidia/diag     — teşhis raporu (&live=1 canlı test,
+ *                               &model=... farklı model dene,
+ *                               &timeout=NN canlı test süresi sınırı)
  *
- * The API key is NEVER sent to the browser. It is read, in order, from:
- *   1. ../../nvidia-config.php  (one level ABOVE the web root — recommended)
- *   2. api/config.php           (inside the web root, protected by .htaccess)
- *   3. NVIDIA_API_KEY / NVIDIA_MODEL environment variables
+ * Hata ayıklama: Her chat/test isteğinin sonucu api/debug.log dosyasına
+ * kaydedilir (cURL hata metni, bağlantı/ilk yanıt/toplam süre, HTTP durumu,
+ * NVIDIA'nın döndürdüğü hata, model). API ANAHTARI VE SOHBET İÇERİĞİ ASLA
+ * KAYDEDİLMEZ. Son kayıtlar teşhis raporunun "son_kayitlar" alanında görünür.
+ *
+ * Anahtar sırayla şuralardan okunur:
+ *   1. ../../nvidia-config.php  (web kökünün BİR ÜSTÜ — önerilen)
+ *   2. api/config.php           (web kökü içinde, .htaccess korumalı)
+ *   3. NVIDIA_API_KEY / NVIDIA_MODEL ortam değişkenleri
  */
 
 declare(strict_types=1);
@@ -20,9 +27,12 @@ const DEFAULT_MODEL = 'z-ai/glm-5.3-flash';
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_URL = NVIDIA_BASE_URL . '/chat/completions';
 const MAX_BODY_BYTES = 20971520; // 20 MB
+const DEBUG_LOG_FILE = __DIR__ . '/debug.log';
+const DEBUG_LOG_MAX_BYTES = 262144; // ~256 KB; aşılırsa dosya sıfırlanır
 
 @set_time_limit(0);
 @ini_set('display_errors', '0');
+@date_default_timezone_set('Europe/Istanbul');
 
 // PHP < 8.1 uyumluluğu (bazı paylaşımlı hostingler eski sürüm çalıştırır).
 if (!function_exists('array_is_list')) {
@@ -43,7 +53,7 @@ function json_out(int $status, array $payload): void
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -51,10 +61,9 @@ function load_config(): array
 {
     $apiKey = '';
     $model = '';
+    $timeout = 0;
 
-    // 1) Config file above the web root (safest on shared hosting).
     $aboveRoot = dirname(__DIR__, 2) . '/nvidia-config.php';
-    // 2) Config file next to this script (protected by api/.htaccess).
     $local = __DIR__ . '/config.php';
 
     foreach ([$aboveRoot, $local] as $file) {
@@ -67,6 +76,9 @@ function load_config(): array
                 if ($model === '' && isset($cfg['NVIDIA_MODEL'])) {
                     $model = trim((string) $cfg['NVIDIA_MODEL']);
                 }
+                if ($timeout === 0 && isset($cfg['NVIDIA_TIMEOUT'])) {
+                    $timeout = (int) $cfg['NVIDIA_TIMEOUT'];
+                }
             }
         }
         if ($apiKey !== '') {
@@ -74,7 +86,6 @@ function load_config(): array
         }
     }
 
-    // 3) Environment variables, if the host provides them.
     if ($apiKey === '') {
         $apiKey = trim((string) (getenv('NVIDIA_API_KEY') ?: ''));
     }
@@ -84,8 +95,11 @@ function load_config(): array
     if ($model === '') {
         $model = DEFAULT_MODEL;
     }
+    if ($timeout < 10 || $timeout > 300) {
+        $timeout = 90;
+    }
 
-    return ['api_key' => $apiKey, 'model' => $model];
+    return ['api_key' => $apiKey, 'model' => $model, 'timeout' => $timeout];
 }
 
 function detect_route(): string
@@ -104,14 +118,30 @@ function detect_route(): string
 }
 
 /**
- * cURL POST with automatic CA-bundle fallback. Some shared hosts
- * (InfinityFree included) occasionally miss a usable CA bundle; on an
- * SSL-verification error we retry once without peer verification so the
- * feature keeps working. Returns [response|false, httpStatus, curlErrno, sslFallbackUsed].
+ * cURL isteği + otomatik CA paketi fallback'i + ayrıntılı zamanlama ölçümü.
+ *
+ * Dönen dizi:
+ *   body            string|false  ham yanıt gövdesi
+ *   http            int           HTTP durum kodu (0 = yanıt yok)
+ *   errno           int           cURL hata numarası (0 = yok)
+ *   error           string        cURL hata metni (anahtar içermez)
+ *   ssl_fallback    bool          SSL doğrulaması atlanarak mı başarıldı?
+ *   dns_sn          float         DNS çözümleme süresi
+ *   baglanti_sn     float         TCP bağlantı süresi
+ *   ssl_sn          float         TLS el sıkışma süresi
+ *   ilk_yanit_sn    float         ilk bayta kadar geçen süre (TTFB)
+ *   toplam_sn       float         toplam süre
+ *   ip              string        bağlanılan IP
  */
 function curl_nvidia_request(string $url, array $headers, ?string $body, int $timeout): array
 {
     $sslFallback = false;
+    $result = [
+        'body' => false, 'http' => 0, 'errno' => 0, 'error' => '',
+        'ssl_fallback' => false, 'dns_sn' => 0.0, 'baglanti_sn' => 0.0,
+        'ssl_sn' => 0.0, 'ilk_yanit_sn' => 0.0, 'toplam_sn' => 0.0, 'ip' => '',
+    ];
+
     for ($attempt = 0; $attempt < 2; $attempt++) {
         $ch = curl_init($url);
         $opts = [
@@ -127,19 +157,92 @@ function curl_nvidia_request(string $url, array $headers, ?string $body, int $ti
             $opts[CURLOPT_POSTFIELDS] = $body;
         }
         curl_setopt_array($ch, $opts);
+
+        $start = microtime(true);
         $response = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $elapsed = microtime(true) - $start;
+
+        $info = curl_getinfo($ch);
         $errno = curl_errno($ch);
+        $error = curl_error($ch);
         curl_close($ch);
 
-        // 35/58/60/77: SSL handshake or CA-bundle problems → retry unverified once.
+        // 35/58/60/77: SSL el sıkışma veya CA paketi sorunu → doğrulamasız bir kez daha dene.
         if ($response === false && $attempt === 0 && in_array($errno, [35, 58, 60, 77], true)) {
             $sslFallback = true;
             continue;
         }
-        return [$response, $status, $errno, $sslFallback];
+
+        $result['body'] = $response;
+        $result['http'] = (int) ($info['http_code'] ?? 0);
+        $result['errno'] = $errno;
+        $result['error'] = $error;
+        $result['ssl_fallback'] = $sslFallback;
+        $result['dns_sn'] = round((float) ($info['namelookup_time'] ?? 0), 3);
+        $result['baglanti_sn'] = round((float) ($info['connect_time'] ?? 0), 3);
+        $result['ssl_sn'] = round((float) ($info['appconnect_time'] ?? 0), 3);
+        $result['ilk_yanit_sn'] = round((float) ($info['starttransfer_time'] ?? 0), 3);
+        $result['toplam_sn'] = round($elapsed, 3);
+        $result['ip'] = (string) ($info['primary_ip'] ?? '');
+        return $result;
     }
-    return [false, 0, 0, $sslFallback];
+    $result['ssl_fallback'] = $sslFallback;
+    return $result;
+}
+
+/** Hata günlüğüne bir satır JSON ekler. Anahtar ve sohbet içeriği yazılmaz. */
+function debug_log(array $entry): void
+{
+    if (is_file(DEBUG_LOG_FILE) && (int) @filesize(DEBUG_LOG_FILE) > DEBUG_LOG_MAX_BYTES) {
+        @unlink(DEBUG_LOG_FILE);
+    }
+    $entry = ['zaman' => date('Y-m-d H:i:s')] + $entry;
+    @file_put_contents(
+        DEBUG_LOG_FILE,
+        json_encode($entry, JSON_UNESCAPED_UNICODE) . "\n",
+        FILE_APPEND | LOCK_EX
+    );
+}
+
+/** Günlüğün son N kaydını (yeniden eskiye) döndürür. */
+function read_debug_tail(int $limit = 15): array
+{
+    if (!is_readable(DEBUG_LOG_FILE)) {
+        return [];
+    }
+    $lines = @file(DEBUG_LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!is_array($lines)) {
+        return [];
+    }
+    $tail = array_slice($lines, -$limit);
+    $out = [];
+    foreach (array_reverse($tail) as $line) {
+        $decoded = json_decode($line, true);
+        $out[] = is_array($decoded) ? $decoded : $line;
+    }
+    return $out;
+}
+
+/** NVIDIA yanıt gövdesinden sağlayıcı hata mesajını çıkarır (kısaltılmış). */
+function extract_provider_error($responseBody): string
+{
+    if (!is_string($responseBody) || $responseBody === '') {
+        return '';
+    }
+    $data = json_decode($responseBody, true);
+    $message = '';
+    if (is_array($data)) {
+        $message = $data['error']['message'] ?? ($data['detail'] ?? ($data['message'] ?? ''));
+        if (is_array($message)) {
+            $message = json_encode($message, JSON_UNESCAPED_UNICODE);
+        }
+    }
+    if (!is_string($message) || $message === '') {
+        $flat = (string) preg_replace('/\s+/', ' ', $responseBody);
+        $message = $flat;
+    }
+    $message = function_exists('mb_substr') ? mb_substr($message, 0, 300) : substr($message, 0, 300);
+    return preg_match('//u', $message) ? $message : '(ikili veri)';
 }
 
 function read_payload(): array
@@ -235,28 +338,54 @@ function handle_chat(bool $test, array $config): void
         'stream' => false,
     ], JSON_UNESCAPED_UNICODE);
 
-    [$response, $status, $curlErr, ] = curl_nvidia_request(NVIDIA_CHAT_URL, [
+    $res = curl_nvidia_request(NVIDIA_CHAT_URL, [
         'Content-Type: application/json',
         'Accept: application/json',
         'Authorization: Bearer ' . $config['api_key'],
-    ], $body, 90);
+    ], $body, $test ? 60 : $config['timeout']);
 
-    if ($response === false || $curlErr !== 0) {
-        // Never echo credentials or raw transport errors to the client.
-        $hint = $curlErr === 28
-            ? 'NVIDIA yanıtı zaman aşımına uğradı. Biraz bekleyip tekrar dene.'
-            : 'NVIDIA servisine ulaşılamadı. Sunucunun dışa giden bağlantılarını /api/nvidia.php?route=diag adresinden kontrol et.';
+    // ---- Hata ayıklama günlüğü (anahtar ve sohbet içeriği YOK) ----
+    $logEntry = [
+        'uc' => $test ? 'test' : 'chat',
+        'model' => $model,
+        'http' => $res['http'],
+        'curl_hata_no' => $res['errno'],
+        'curl_hata' => $res['error'],
+        'dns_sn' => $res['dns_sn'],
+        'baglanti_sn' => $res['baglanti_sn'],
+        'ssl_sn' => $res['ssl_sn'],
+        'ilk_yanit_sn' => $res['ilk_yanit_sn'],
+        'toplam_sn' => $res['toplam_sn'],
+        'ip' => $res['ip'],
+        'ssl_dogrulama_atlandi' => $res['ssl_fallback'],
+        'mesaj_sayisi' => count($messages),
+        'istek_boyutu_bayt' => strlen((string) $body),
+        'zaman_asimi_siniri_sn' => $test ? 60 : $config['timeout'],
+    ];
+    if ($res['http'] !== 200) {
+        $logEntry['saglayici_hata'] = extract_provider_error($res['body']);
+    }
+    debug_log($logEntry);
+
+    if ($res['body'] === false || $res['errno'] !== 0) {
+        $detail = $res['error'] !== '' ? $res['error'] : ('curl hata ' . $res['errno']);
+        if ($res['errno'] === 28) {
+            $hint = $res['ilk_yanit_sn'] > 0
+                ? 'NVIDIA yanıt üretmeye başladı ama süre sınırına takıldı. Biraz bekleyip tekrar dene.'
+                : 'NVIDIA ' . $logEntry['zaman_asimi_siniri_sn'] . ' sn içinde yanıt vermedi (model kuyruğu yoğun olabilir). Biraz bekleyip tekrar dene; sorun sürerse diag sayfasından farklı bir modeli test et.';
+        } else {
+            $hint = 'NVIDIA servisine ulaşılamadı (' . $detail . '). Ayrıntılar için /api/nvidia.php?route=diag adresine bak.';
+        }
         json_out(502, ['error' => ['message' => $hint]]);
     }
 
-    if ($status === 200) {
-        $data = json_decode((string) $response, true);
+    if ($res['http'] === 200) {
+        $data = json_decode((string) $res['body'], true);
         $text = '';
         if (is_array($data)) {
             $message = $data['choices'][0]['message'] ?? [];
             $text = $message['content'] ?? '';
-            // Reasoning models may leave `content` empty and put the answer
-            // (or at least the reasoning) in `reasoning_content`.
+            // Muhakemeli modeller yanıtı reasoning_content alanında bırakabilir.
             if (!is_string($text) || trim($text) === '') {
                 $fallback = $message['reasoning_content'] ?? '';
                 $text = is_string($fallback) ? $fallback : '';
@@ -268,6 +397,7 @@ function handle_chat(bool $test, array $config): void
         json_out(200, ['text' => $text, 'model' => $model]);
     }
 
+    $status = $res['http'];
     $allowed = [400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504];
     if (!in_array($status, $allowed, true)) {
         $status = 502;
@@ -276,9 +406,10 @@ function handle_chat(bool $test, array $config): void
 }
 
 /**
- * Self-diagnosis endpoint: browse to /api/nvidia.php?route=diag
- * (add &live=1 to also run a tiny real completion against NVIDIA).
- * Reveals configuration/connectivity problems without exposing the key.
+ * Teşhis: /api/nvidia.php?route=diag
+ *   &live=1        gerçek (küçük) sohbet isteği de çalıştır
+ *   &model=...     canlı testte farklı bir modeli dene (yalnızca teşhis için)
+ *   &timeout=NN    canlı test süre sınırı, 20-120 sn (varsayılan 60)
  */
 function handle_diag(array $config): void
 {
@@ -295,11 +426,14 @@ function handle_diag(array $config): void
 
     $report = [
         'php_surumu' => PHP_VERSION,
+        'php_max_execution_time' => (string) ini_get('max_execution_time'),
         'curl_eklentisi' => extension_loaded('curl'),
         'yapilandirma_kaynagi' => $configSource,
         'anahtar_ayarli' => $config['api_key'] !== '',
         'anahtar_uzunlugu' => strlen($config['api_key']),
         'model' => $config['model'],
+        'sohbet_zaman_asimi_sn' => $config['timeout'],
+        'gunluk_yazilabilir' => is_writable(__DIR__),
         'yonlendirme' => isset($_GET['route']) ? 'query (?route=...)' : 'htaccess rewrite',
     ];
 
@@ -308,61 +442,97 @@ function handle_diag(array $config): void
         json_out(200, $report);
     }
 
-    // Outbound connectivity probe (no key needed; 401 = reachable).
-    [$resp, $status, $errno, $sslFallback] = curl_nvidia_request(
-        NVIDIA_BASE_URL . '/models',
-        ['Accept: application/json'],
-        null,
-        12
-    );
+    // 1) Dışa giden bağlantı sondası (anahtar gerekmez; 401 = erişilebilir).
+    $probe = curl_nvidia_request(NVIDIA_BASE_URL . '/models', ['Accept: application/json'], null, 12);
     $report['nvidia_baglanti'] = [
-        'http_durumu' => $status,
-        'curl_hata_kodu' => $errno,
-        'ssl_dogrulama_atlandi' => $sslFallback,
-        'erisilebilir' => $resp !== false && $status > 0,
+        'http_durumu' => $probe['http'],
+        'curl_hata_kodu' => $probe['errno'],
+        'curl_hata' => $probe['error'],
+        'dns_sn' => $probe['dns_sn'],
+        'baglanti_sn' => $probe['baglanti_sn'],
+        'ssl_sn' => $probe['ssl_sn'],
+        'ilk_yanit_sn' => $probe['ilk_yanit_sn'],
+        'toplam_sn' => $probe['toplam_sn'],
+        'ip' => $probe['ip'],
+        'ssl_dogrulama_atlandi' => $probe['ssl_fallback'],
+        'erisilebilir' => $probe['body'] !== false && $probe['http'] > 0,
     ];
-    if ($resp === false || $status === 0) {
-        $report['sonuc'] = 'HATA: Sunucudan NVIDIA API\'ye dışa giden bağlantı kurulamıyor (curl hata ' . $errno . '). Hosting dışa giden istekleri engelliyor olabilir.';
+    if ($probe['body'] === false || $probe['http'] === 0) {
+        $report['son_kayitlar'] = read_debug_tail();
+        $report['sonuc'] = 'HATA: Sunucudan NVIDIA API\'ye dışa giden bağlantı kurulamıyor (curl ' . $probe['errno'] . ': ' . $probe['error'] . '). Hosting dışa giden istekleri engelliyor olabilir.';
         json_out(200, $report);
     }
 
     if ($config['api_key'] === '') {
+        $report['son_kayitlar'] = read_debug_tail();
         $report['sonuc'] = 'HATA: API anahtarı bulunamadı. nvidia-config.php dosyasını htdocs klasörünün BİR ÜSTÜNE, ya da config.php dosyasını api/ içine koy.';
         json_out(200, $report);
     }
 
+    // 2) İsteğe bağlı canlı test.
     if (isset($_GET['live'])) {
+        $liveModel = trim((string) ($_GET['model'] ?? ''));
+        if ($liveModel === '' || !preg_match('~^[\w.\-/]{1,120}$~', $liveModel)) {
+            $liveModel = $config['model'];
+        }
+        $liveTimeout = (int) ($_GET['timeout'] ?? 60);
+        $liveTimeout = max(20, min(120, $liveTimeout));
+
         $body = json_encode([
-            'model' => $config['model'],
+            'model' => $liveModel,
             'messages' => [['role' => 'user', 'content' => 'Say OK']],
             'max_tokens' => 16,
             'temperature' => 0,
             'stream' => false,
         ]);
-        [$liveResp, $liveStatus, $liveErrno, ] = curl_nvidia_request(NVIDIA_CHAT_URL, [
+        $live = curl_nvidia_request(NVIDIA_CHAT_URL, [
             'Content-Type: application/json',
             'Accept: application/json',
             'Authorization: Bearer ' . $config['api_key'],
-        ], $body, 60);
-        $excerpt = '';
-        if (is_string($liveResp)) {
-            $flat = (string) preg_replace('/\s+/', ' ', $liveResp);
-            $excerpt = function_exists('mb_substr') ? mb_substr($flat, 0, 400) : substr($flat, 0, 400);
-            if (!preg_match('//u', $excerpt)) {
-                $excerpt = '(ikili veri)';
-            }
-        }
+        ], $body, $liveTimeout);
+
         $report['canli_test'] = [
-            'http_durumu' => $liveStatus,
-            'curl_hata_kodu' => $liveErrno,
-            'yanit_ozeti' => $excerpt,
+            'model' => $liveModel,
+            'zaman_asimi_siniri_sn' => $liveTimeout,
+            'http_durumu' => $live['http'],
+            'curl_hata_kodu' => $live['errno'],
+            'curl_hata' => $live['error'],
+            'dns_sn' => $live['dns_sn'],
+            'baglanti_sn' => $live['baglanti_sn'],
+            'ssl_sn' => $live['ssl_sn'],
+            'ilk_yanit_sn' => $live['ilk_yanit_sn'],
+            'toplam_sn' => $live['toplam_sn'],
+            'ip' => $live['ip'],
+            'ssl_dogrulama_atlandi' => $live['ssl_fallback'],
+            'saglayici_yanit_ozeti' => extract_provider_error($live['body']),
         ];
-        $report['sonuc'] = $liveStatus === 200
-            ? 'BAŞARILI: Anahtar ve model çalışıyor. Sorun devam ediyorsa tarayıcı konsolundaki ağ hatalarına bak.'
-            : 'HATA: NVIDIA isteği ' . $liveStatus . ' döndürdü (401/403 = anahtar geçersiz, 404 = model adı yanlış, 429 = kota).';
+
+        debug_log([
+            'uc' => 'diag-live',
+            'model' => $liveModel,
+            'http' => $live['http'],
+            'curl_hata_no' => $live['errno'],
+            'curl_hata' => $live['error'],
+            'baglanti_sn' => $live['baglanti_sn'],
+            'ilk_yanit_sn' => $live['ilk_yanit_sn'],
+            'toplam_sn' => $live['toplam_sn'],
+            'zaman_asimi_siniri_sn' => $liveTimeout,
+        ]);
+
+        if ($live['http'] === 200) {
+            $report['sonuc'] = 'BAŞARILI: ' . $liveModel . ' modeli ' . $live['toplam_sn'] . ' sn içinde yanıt verdi. Anahtar ve bağlantı çalışıyor.';
+        } elseif ($live['errno'] === 28) {
+            $report['sonuc'] = 'ZAMAN AŞIMI: Bağlantı kuruldu (' . $live['baglanti_sn'] . ' sn) ama ' . $liveModel . ' modeli ' . $liveTimeout . ' sn içinde yanıt üretmedi. Model kuyruğu yoğun olabilir. Deneyin: &model=meta/llama-3.1-8b-instruct gibi hızlı bir modelle tekrar test edin; o çalışıyorsa sorun modelin yoğunluğudur — yapılandırmada NVIDIA_MODEL değerini değiştirin.';
+        } elseif ($live['errno'] !== 0) {
+            $report['sonuc'] = 'HATA: cURL ' . $live['errno'] . ' — ' . $live['error'];
+        } else {
+            $report['sonuc'] = 'HATA: NVIDIA ' . $live['http'] . ' döndürdü (401/403 = anahtar geçersiz, 404 = model adı yanlış, 429 = kota). Ayrıntı: ' . $report['canli_test']['saglayici_yanit_ozeti'];
+        }
     } else {
-        $report['sonuc'] = 'Bağlantı ve anahtar hazır görünüyor. Gerçek istekle denemek için adrese &live=1 ekle.';
+        $report['sonuc'] = 'Bağlantı ve anahtar hazır görünüyor. Gerçek istekle denemek için adrese &live=1 ekle. Farklı model denemek için &live=1&model=MODEL_ADI kullan.';
     }
+
+    $report['son_kayitlar'] = read_debug_tail();
     json_out(200, $report);
 }
 

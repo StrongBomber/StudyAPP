@@ -1,5 +1,7 @@
-# API anahtarını içeren yapılandırma dosyalarına doğrudan erişimi engelle.
-<FilesMatch "^config(\.sample)?\.php$">
+# API anahtarını içeren yapılandırma dosyalarına ve hata günlüğüne
+# doğrudan tarayıcı erişimini engelle. (Günlük anahtar içermez ama
+# yine de yalnızca teşhis sayfası üzerinden okunmalıdır.)
+<FilesMatch "^(config(\.sample)?\.php|debug\.log)$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>

@@ -106,11 +106,42 @@ AI çalışmıyorsa tarayıcıdan şu adresi ziyaret edin:
 https://alanadiniz.com/api/nvidia.php?route=diag&live=1
 ```
 
-Bu sayfa PHP sürümünü, cURL durumunu, anahtarın bulunup bulunmadığını,
-sunucudan NVIDIA'ya dışa giden bağlantının kurulup kurulamadığını ve gerçek bir
-test isteğinin sonucunu JSON olarak raporlar. `sonuc` alanı sorunu Türkçe
-açıklar (anahtar geçersiz, model bulunamadı, bağlantı engelli vb.). Teşhis
-sayfası anahtarınızı asla göstermez.
+Bu sayfa şunları JSON olarak raporlar — `sonuc` alanı sorunu Türkçe açıklar:
+
+- PHP sürümü, `max_execution_time`, cURL durumu, yapılandırma kaynağı
+- **Bağlantı sondası**: DNS / TCP bağlantı / TLS / ilk yanıt / toplam süre
+  ölçümleri, bağlanılan IP, cURL hata metni
+- **Canlı test** (`&live=1`): gerçek "Say OK" isteğinin HTTP durumu, cURL hata
+  metni, tüm süre ölçümleri ve NVIDIA'nın döndürdüğü ham hata özeti
+- **`son_kayitlar`**: geçmiş AI isteklerinin hata günlüğü (aşağıya bakın)
+
+Teşhis sayfası ve günlük **anahtarınızı ve sohbet içeriğinizi asla içermez**.
+
+### 📒 Otomatik hata günlüğü
+
+Her chat/test isteğinin sonucu `api/debug.log` dosyasına kaydedilir: cURL hata
+metni, bağlantı süresi, ilk yanıt süresi (TTFB), toplam süre, HTTP durumu,
+NVIDIA'nın hata mesajı, model, mesaj sayısı ve istek boyutu. Günlük ~256 KB'ı
+aşınca kendini sıfırlar; tarayıcıdan doğrudan erişim `.htaccess` ile engellidir
+— son kayıtları teşhis sayfasındaki `son_kayitlar` alanından okuyun.
+
+### ⏱️ Zaman aşımı teşhisi ve model değiştirme
+
+Canlı test `ZAMAN AŞIMI` veriyorsa süre ölçümlerine bakın:
+
+- `baglanti_sn` küçük (ör. 0.2) + `ilk_yanit_sn` = 0 → bağlantı kuruluyor ama
+  **model yanıt üretmiyor** (NVIDIA kuyruğu yoğun). Farklı bir modeli deneyin:
+
+  ```text
+  .../api/nvidia.php?route=diag&live=1&model=meta/llama-3.1-8b-instruct
+  .../api/nvidia.php?route=diag&live=1&model=z-ai/glm-5.3-flash&timeout=120
+  ```
+
+  Hızlı yanıt veren bir model bulunca yapılandırma dosyanızdaki
+  `NVIDIA_MODEL` değerini onunla değiştirin. Sohbet zaman aşımını da
+  `'NVIDIA_TIMEOUT' => 120` gibi bir satırla yükseltebilirsiniz.
+- `baglanti_sn` = 0 ve cURL hatası bağlantıya işaret ediyor → hosting dışa
+  giden isteği engelliyor; `son_kayitlar` ve `curl_hata` metnini not alın.
 
 ### Sık karşılaşılan durumlar
 
