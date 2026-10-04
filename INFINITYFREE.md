@@ -1,6 +1,6 @@
 # InfinityFree dağıtım rehberi
 
-Bu proje InfinityFree’nin ücretsiz web hosting hesabı için statik arayüz ve PHP NVIDIA proxy’si olarak hazırlanmıştır. InfinityFree’de `server.py` çalıştırılmaz; Python uygulaması desteklenmediği için PHP uç noktaları kullanılır. Arayüz `/api/nvidia/status.php` ve `/api/nvidia/chat.php` yollarına aynı alan adı üzerinden istek gönderir.
+Bu proje InfinityFree’nin ücretsiz web hosting hesabı için statik arayüz ve PHP NVIDIA proxy’si olarak hazırlanmıştır. Varsayılan kurulumda arayüz `/api/nvidia/status.php` ve `/api/nvidia/chat.php` yollarına aynı alan adı üzerinden istek gönderir. InfinityFree’de `server.py` çalıştırılmaz; Python desteklenmediği için backend PHP’dir. Alternatif olarak PHP proxy yerine Railway’de Python backend kullanabilirsin; bunun için [`RAILWAY.md`](RAILWAY.md) rehberini izle.
 
 ## 1. Alan adını bağla
 
@@ -31,6 +31,7 @@ InfinityFree File Manager veya FTP ile seçtiğin alan adının `htdocs/` web k�
 ```text
 htdocs/
 ├── index.html
+├── app-config.js
 ├── assets/demo.pdf
 ├── vendor/
 └── api/nvidia/
@@ -43,9 +44,11 @@ htdocs/
 
 Ardından `https://alan-adin/` adresini aç. PDF görüntüleme, çizim ve notlar PHP anahtarı olmadan da çalışır; PDF ve notlar tarayıcıda tutulur.
 
-## 4. AI asistanını isteğe bağlı etkinleştir
+> Railway backend kullanacaksan paketi oluşturmadan önce `app-config.js` içindeki `apiBaseUrl` alanına Railway HTTPS adresini yaz. PHP proxy ayarını kapalı bırak ve adımlar için [`RAILWAY.md`](RAILWAY.md) dosyasına geç.
 
-AI varsayılan olarak kapalıdır. NVIDIA NIM anahtarını oluşturduktan sonra hosting hesabındaki `htdocs/api/nvidia/` klasöründe `config.example.php` dosyasını `config.php` adıyla kopyala ve yalnızca sunucudaki kopyayı düzenle:
+## 4. AI asistanını (InfinityFree PHP proxy’siyle) isteğe bağlı etkinleştir
+
+Aşağıdaki yöntem yalnızca AI backend’ini doğrudan InfinityFree üzerinde çalıştırmak içindir. AI varsayılan olarak kapalıdır. NVIDIA NIM anahtarını oluşturduktan sonra hosting hesabındaki `htdocs/api/nvidia/` klasöründe `config.example.php` dosyasını `config.php` adıyla kopyala ve yalnızca sunucudaki kopyayı düzenle:
 
 ```php
 <?php

@@ -20,7 +20,7 @@ Stylus basıncı ve fiziksel kalem hissi cihazdan cihaza değişir; uygun bir ci
 ## Gereksinimler
 
 - Yerel geliştirme için Python 3.10 veya üzeri
-- InfinityFree tarafında yapay zekâ proxy’si için PHP ve cURL
+- InfinityFree tarafında yerel yapay zekâ proxy’si için PHP ve cURL; alternatif Railway backend’i için Railway hesabı
 - NVIDIA NIM erişimi ve `NVIDIA_API_KEY` (yalnızca yapay zekâ sohbeti için)
 - İsteğe bağlı: testlerde JavaScript sözdizimi kontrolü için Node.js
 
@@ -77,7 +77,11 @@ InfinityFree’de yayınlamak için PHP dağıtım dosyalarını hazırlayın:
 bash scripts/build-infinityfree.sh
 ```
 
-Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. Yapay zekâ varsayılan olarak kapalıdır; etkinleştirmek ve alan adı/DNS ayarlarını yapmak için [`INFINITYFREE.md`](INFINITYFREE.md) adımlarını izleyin. Gerçek NVIDIA anahtarını yalnızca hosting hesabındaki `api/nvidia/config.php` dosyasına yazın; bu dosya Git’e eklenmez.
+Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. Yapay zekâ varsayılan olarak kapalıdır; etkinleştirmek için [`INFINITYFREE.md`](INFINITYFREE.md) adımlarını izleyin. Anahtarı InfinityFree PHP modunda hostingdeki `api/nvidia/config.php`, Railway modunda ise yalnızca Railway Variables alanına girin.
+
+### İsteğe bağlı Railway backend
+
+GitHub’dan Railway’e Python API deploy edip InfinityFree’yi yalnızca arayüz için kullanabilirsin. `railpack.json`, CORS ve `app-config.js` adımları [`RAILWAY.md`](RAILWAY.md) dosyasında.
 
 ## GitHub deposuna yükleme
 
@@ -97,7 +101,7 @@ git push -u origin main
 ## Güvenlik ve gizlilik
 
 - Gerçek anahtarı kaynak dosyalarına, commit’lere, issue’lara veya herkese açık depoya koymayın. Anahtar yanlışlıkla paylaşıldıysa NVIDIA panelinden iptal edip yenisini oluşturun.
-- `server.py` yerel geliştirme içindir; internete açık sunucu olarak kullanmayın. InfinityFree PHP proxy’si anahtarı sunucu tarafında tutar ve IP başına saatlik sınır uygular; yine de AI uç noktası site ziyaretçilerine açıktır. AI’ı etkinleştirirseniz NVIDIA kotanızın başkaları tarafından kullanılabileceğini unutmayın.
+- NVIDIA anahtarını istemciye veya GitHub’a koymayın; InfinityFree PHP modunda hosting `config.php` dosyasında, Railway modunda Railway Variables içinde tutun. PHP ve Railway proxy’leri temel IP/saat sınırı uygular. CORS bir oturum açma sistemi değildir; AI açıkken site ziyaretçileri NVIDIA kotanı kullanabilir, tüketimi takip et.
 - GitHub Pages Python veya PHP API’sini çalıştırmaz. InfinityFree dağıtımı için `scripts/build-infinityfree.sh` paketini kullanın.
 - PDF’ler ve notlar uygulama sunucusuna yüklenmez; tarayıcıda saklanır. Asistana gönderilen sohbet içeriği (ilk soruda açık sayfanın küçültülmüş görüntüsü dâhil) seçili backend üzerinden NVIDIA servisine iletilir.
 
@@ -122,10 +126,12 @@ Testler sunucu doğrulamalarını ve ön yüz sözleşmelerini denetler; gerçek
 ```text
 .
 ├── index.html                 # Web uygulaması
-├── server.py                  # Yerel statik sunucu ve NVIDIA proxy’si
+├── server.py                  # Python/NVIDIA backend (yerel veya Railway)
 ├── api/nvidia/                # InfinityFree PHP uç noktaları ve örnek ayar
+├── app-config.js              # Gizli olmayan API adresi yapılandırması
+├── railpack.json              # Railway başlatma ayarı
 ├── scripts/build-infinityfree.sh
-├── requirements.txt           # Yerel Python sunucu bağımlılıkları
+├── requirements.txt           # Python sunucu bağımlılıkları
 ├── assets/demo.pdf            # Örnek PDF
 ├── vendor/                    # PDF.js, pdf-lib, KaTeX ve lisansları
 ├── tests/                     # Python, ön yüz ve dağıtım testleri

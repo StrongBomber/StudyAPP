@@ -34,9 +34,12 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("Gemini", STATIC_MARKUP)
         self.assertNotIn("Önce soruyu kırp", STATIC_MARKUP)
 
-    def test_infinityfree_php_api_paths_are_used(self):
-        self.assertIn("fetch('/api/nvidia/status.php'", MODULE)
-        self.assertIn("requestWithRetry('/api/nvidia/chat.php'", MODULE)
+    def test_infinityfree_and_railway_api_paths_are_configurable(self):
+        self.assertIn("fetch(nvidiaApiEndpoint('status')", MODULE)
+        self.assertIn("requestWithRetry(nvidiaApiEndpoint('chat')", MODULE)
+        self.assertIn("STUDYAPP_CONFIG?.apiBaseUrl", MODULE)
+        self.assertIn("`${path}.php`", MODULE)
+        self.assertIn('src="./app-config.js"', HTML)
         self.assertNotIn("NVIDIA_API_KEY", MODULE)
 
     def test_progress_uses_current_pdf_instead_of_mock_weekly_data(self):

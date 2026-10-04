@@ -7,8 +7,11 @@ or commit it to this project.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
+import threading
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -18,37 +21,142 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = "z-ai/glm-5.3-flash"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 MAX_BODY_BYTES = 20 * 1024 * 1024
+RATE_WINDOW_SECONDS = 60 * 60
+_rate_lock = threading.Lock()
+_rate_buckets: dict[str, list[float]] = {}
 
 
 class AppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
-    def do_GET(self) -> None:
+    def _api_route(self) -> str:
         route = urlsplit(self.path).path
-        if route.endswith(".php"):
-            route = route[:-4]
+        return route[:-4] if route.endswith(".php") else route
+
+    def _cors_origins(self) -> set[str]:
+        configured = os.environ.get("APP_CORS_ORIGINS", "")
+        return {origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()}
+
+    def _origin_allowed(self) -> bool:
+        origin = self.headers.get("Origin", "").strip()
+        if not origin:
+            return True
+        normalized = origin.rstrip("/")
+        if normalized in self._cors_origins():
+            return True
+        try:
+            parsed = urlsplit(normalized)
+        except ValueError:
+            return False
+        request_host = self.headers.get("Host", "").strip().casefold()
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc) and parsed.netloc.casefold() == request_host
+
+    def _ensure_api_origin(self) -> bool:
+        if self._origin_allowed():
+            return True
+        self._json(403, {"error": {"message": "Bu alan adına API erişimi izinli değil."}})
+        return False
+
+    def _add_cors_headers(self) -> None:
+        origin = self.headers.get("Origin", "").strip()
+        if origin and self._origin_allowed():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def _client_ip(self) -> str:
+        candidate = self.headers.get("X-Real-IP", "").strip()
+        try:
+            return str(ipaddress.ip_address(candidate))
+        except ValueError:
+            return self.client_address[0]
+
+    def _rate_limit_allowed(self) -> bool:
+        try:
+            limit = int(os.environ.get("APP_RATE_LIMIT_PER_HOUR", "30"))
+        except ValueError:
+            limit = 30
+        limit = max(1, min(500, limit))
+        client_ip = self._client_ip()
+        now = time.monotonic()
+        cutoff = now - RATE_WINDOW_SECONDS
+
+        with _rate_lock:
+            for key, timestamps in list(_rate_buckets.items()):
+                recent = [timestamp for timestamp in timestamps if timestamp > cutoff]
+                if recent:
+                    _rate_buckets[key] = recent
+                else:
+                    del _rate_buckets[key]
+            timestamps = _rate_buckets.get(client_ip, [])
+            if len(timestamps) >= limit:
+                return False
+            timestamps.append(now)
+            _rate_buckets[client_ip] = timestamps
+            return True
+
+    def do_GET(self) -> None:
+        route = self._api_route()
         if route == "/api/nvidia/status":
+            if not self._ensure_api_origin():
+                return
             model = os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
             self._json(200, {"configured": bool(os.environ.get("NVIDIA_API_KEY", "").strip()), "model": model})
             return
         super().do_GET()
 
     def do_POST(self) -> None:
-        route = urlsplit(self.path).path
-        if route.endswith(".php"):
-            route = route[:-4]
+        route = self._api_route()
         if route not in {"/api/nvidia/chat", "/api/nvidia/test"}:
             self._json(404, {"error": {"message": "API endpoint not found."}})
             return
+        if not self._ensure_api_origin():
+            return
         self._nvidia_request(test=route.endswith("/test"))
 
-    def _json(self, status: int, payload: dict[str, Any]) -> None:
+    def do_OPTIONS(self) -> None:
+        route = self._api_route()
+        route_methods = {
+            "/api/nvidia/status": {"GET"},
+            "/api/nvidia/chat": {"POST"},
+            "/api/nvidia/test": {"POST"},
+        }
+        if route not in route_methods:
+            self._json(404, {"error": {"message": "API endpoint not found."}})
+            return
+        if not self._ensure_api_origin():
+            return
+
+        requested_method = self.headers.get("Access-Control-Request-Method", "").upper()
+        if requested_method and requested_method not in route_methods[route]:
+            self._json(405, {"error": {"message": "İstenen HTTP yöntemi izinli değil."}})
+            return
+        requested_headers = {
+            header.strip().lower()
+            for header in self.headers.get("Access-Control-Request-Headers", "").split(",")
+            if header.strip()
+        }
+        if not requested_headers.issubset({"content-type", "cache-control", "pragma"}):
+            self._json(403, {"error": {"message": "İstenen HTTP başlığı izinli değil."}})
+            return
+
+        self.send_response(204)
+        self._add_cors_headers()
+        self.send_header("Access-Control-Allow-Methods", ", ".join(sorted(route_methods[route] | {"OPTIONS"})))
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Cache-Control, Pragma")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _json(self, status: int, payload: dict[str, Any], extra_headers: dict[str, str] | None = None) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self._add_cors_headers()
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(raw)
 
@@ -117,6 +225,14 @@ class AppHandler(SimpleHTTPRequestHandler):
             return
         if not 1 <= max_tokens <= 4096 or not 0 <= temperature <= 2 or not 0 < top_p <= 1:
             self._json(400, {"error": {"message": "Model ayarları izin verilen aralığın dışında."}})
+            return
+
+        if not self._rate_limit_allowed():
+            self._json(
+                429,
+                {"error": {"message": "Bu IP için saatlik AI kullanım sınırına ulaşıldı. Daha sonra tekrar dene."}},
+                {"Retry-After": "3600"},
+            )
             return
 
         try:

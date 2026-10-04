@@ -28,7 +28,7 @@ esac
 
 rm -rf -- "$OUT"
 mkdir -p "$OUT/api/nvidia"
-cp -- "$ROOT/index.html" "$OUT/index.html"
+cp -- "$ROOT/index.html" "$ROOT/app-config.js" "$OUT/"
 cp -a -- "$ROOT/assets" "$ROOT/vendor" "$OUT/"
 for file in .htaccess common.php status.php chat.php config.example.php; do
   cp -- "$ROOT/api/nvidia/$file" "$OUT/api/nvidia/$file"
