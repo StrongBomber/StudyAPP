@@ -55,8 +55,7 @@ API anahtarı yalnızca sunucu tarafında saklanır; uygulamada anahtarı girece
 
 ```dotenv
 AI_ENABLED=true
-NVIDIA_API_KEY=nvapi-ANAHTARINI_BURAYA_YAZ
-NVIDIA_MODEL=z-ai/glm-5.3-flash
+API_KEY=ANAHTARINI_BURAYA_YAZ
 AI_RATE_LIMIT_PER_HOUR=30
 ```
 
@@ -72,6 +71,6 @@ PHP proxy’si NVIDIA isteğini sunucudan yapar, isteği aynı alan adıyla sın
 
 - **Ana sayfa açılmıyor:** `index.html` doğrudan `htdocs/` içinde olmalı; `htdocs/proje/index.html` içine yüklediysen adresin de `/proje/` olmalıdır. Önerilen kurulum dosyaları doğrudan web köküne koyar.
 - **Arayüz tepkisiz veya PDF.js yüklenmiyor:** `htdocs/.htaccess` dosyasının yüklendiğini doğrula; bu dosya InfinityFree’de PDF.js’in `.mjs` dosyalarının JavaScript modülü olarak sunulmasını sağlar. Ayrıca `vendor/` klasörünü ve alt klasörlerini eksiksiz yükle; FTP’de ikili dosyaları ASCII modunda aktarma.
-- **AI bağlantısı hazır değil:** `htdocs/.env` dosyasının varlığını, `AI_ENABLED=true` ve `NVIDIA_API_KEY` değerlerini kontrol et; ardından AI panelindeki durumu yenileyip bağlantı testini çalıştır. `.env` dosyası görünmüyorsa FTP/File Manager’da gizli dosyaları göster veya yeni dosya oluştur.
+- **AI bağlantısı hazır değil:** `htdocs/.env` dosyasının varlığını, `AI_ENABLED=true` ve `API_KEY` değerlerini kontrol et; ardından AI panelindeki durumu yenileyip bağlantı testini çalıştır. `.env` dosyası görünmüyorsa FTP/File Manager’da gizli dosyaları göster veya yeni dosya oluştur.
 - **AI isteğinde 403/502:** InfinityFree dış API’lere giden site isteklerine izin verdiğini belirtir; ancak aynı siteye farklı bir host adıyla (`www` ve `www` olmayan alan adı gibi) çapraz istek gönderme. Siteyi ve API’yi tek bir HTTPS host adı üzerinden kullan. Sunucu tarafı PHP cURL veya NVIDIA erişimi hosting hesabında çalışmıyorsa AI özelliğini başka bir backend’de barındırmak gerekir.
 - **Harici mobil uygulamadan API kullanımı:** InfinityFree ücretsiz planı genel API hostingi ve çapraz alan adı isteklerini kısıtlar. Bu dağıtım yalnızca aynı web sitesini ziyaret eden tarayıcı içindir.

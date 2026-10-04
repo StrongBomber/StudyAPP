@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Local static-file server plus a server-side NVIDIA NIM chat proxy.
+"""Local static-file server plus a server-side AI chat proxy.
 
-Keep NVIDIA_API_KEY in a private .env file or the process environment; never
+Keep the API key in a private .env file or the process environment; never
 place it in the browser or commit it to this project.
 """
 from __future__ import annotations
@@ -62,6 +62,18 @@ def ai_is_enabled() -> bool:
     return value not in {"0", "false", "no", "off"}
 
 
+def ai_api_key() -> str:
+    return (
+        os.environ.get("API_KEY", "").strip()
+        or os.environ.get("AI_API_KEY", "").strip()
+        or os.environ.get("NVIDIA_API_KEY", "").strip()
+    )
+
+
+def ai_model() -> str:
+    return os.environ.get("AI_MODEL", "").strip() or os.environ.get("NVIDIA_MODEL", "").strip() or DEFAULT_MODEL
+
+
 class AppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -78,11 +90,10 @@ class AppHandler(SimpleHTTPRequestHandler):
         if route.endswith(".php"):
             route = route[:-4]
         if route == "/api/nvidia/status":
-            model = os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-            key_present = bool(os.environ.get("NVIDIA_API_KEY", "").strip())
+            key_present = bool(ai_api_key())
             enabled = ai_is_enabled()
             reason = "disabled" if not enabled else ("ready" if key_present else "missing_key")
-            self._json(200, {"configured": reason == "ready", "model": model, "reason": reason})
+            self._json(200, {"configured": reason == "ready", "reason": reason})
             return
         super().do_GET()
 
@@ -131,12 +142,12 @@ class AppHandler(SimpleHTTPRequestHandler):
         if payload is None:
             return
 
-        api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+        api_key = ai_api_key()
         if not ai_is_enabled():
             self._json(424, {"error": {"message": "AI kapalı. .env dosyasında AI_ENABLED=true ayarla."}})
             return
         if not api_key:
-            self._json(424, {"error": {"message": "NVIDIA_API_KEY bulunamadı. Proje köküne .env dosyası ekle veya sunucu ortam değişkenini tanımla."}})
+            self._json(424, {"error": {"message": "API anahtarı bulunamadı. Proje köküne .env dosyası ekle veya sunucu ortam değişkenini tanımla."}})
             return
 
         try:
@@ -145,7 +156,7 @@ class AppHandler(SimpleHTTPRequestHandler):
             self._json(424, {"error": {"message": "Python OpenAI paketi kurulu değil. `pip install -r requirements.txt` komutunu çalıştır."}})
             return
 
-        configured_model = os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+        configured_model = ai_model()
         model = str(payload.get("model") or configured_model)
         if model != configured_model:
             self._json(400, {"error": {"message": "İstenen model NVIDIA_MODEL sunucu ayarıyla eşleşmiyor."}})
@@ -192,7 +203,7 @@ class AppHandler(SimpleHTTPRequestHandler):
             text = completion.choices[0].message.content if completion.choices else ""
             if not isinstance(text, str):
                 text = ""
-            self._json(200, {"text": text, "model": model})
+            self._json(200, {"text": text})
         except Exception as exc:  # Return sanitized provider errors; never echo credentials.
             status = getattr(exc, "status_code", None)
             if not isinstance(status, int) or status not in {400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504}:
@@ -218,13 +229,13 @@ class AppServer(ThreadingHTTPServer):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="PDF study app and NVIDIA NIM proxy")
+    parser = argparse.ArgumentParser(description="PDF study app and server-side AI proxy")
     parser.add_argument("--host", default=os.environ.get("APP_HOST", "127.0.0.1"), help="Bind address (default: localhost)")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "5173")), help="Port (default: 5173)")
     args = parser.parse_args()
     server = AppServer((args.host, args.port), AppHandler)
     print(f"PDF study app serving on http://{args.host}:{args.port}")
-    print("NVIDIA proxy reads the private .env file or process environment; AI_ENABLED can disable it.")
+    print("AI proxy reads the private .env file or process environment; AI_ENABLED can disable it.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

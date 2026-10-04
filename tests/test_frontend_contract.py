@@ -31,7 +31,7 @@ class FrontendContractTests(unittest.TestCase):
     def test_no_settings_dialog_or_provider_details_in_ai_markup(self):
         for removed in ('id="apiModal"', 'id="apiSettingsBtn"', 'id="providerSelect"', 'id="apiKeyInput"'):
             self.assertNotIn(removed, STATIC_MARKUP)
-        self.assertNotIn("Gemini", STATIC_MARKUP)
+        self.assertNotRegex(STATIC_MARKUP, r"(?i)\bNVIDIA\b|\bNIM\b|Gemini|z-ai/glm")
         self.assertNotIn("Önce soruyu kırp", STATIC_MARKUP)
 
     def test_infinityfree_php_api_paths_are_used(self):
@@ -46,7 +46,32 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("fetch('/api/nvidia/test.php'", MODULE)
         self.assertIn("function copyAiEnvExample()", MODULE)
         self.assertNotIn('id="apiKeyInput"', STATIC_MARKUP)
+        self.assertIn("API_KEY=", STATIC_MARKUP)
+        self.assertNotIn("AI_API_KEY", STATIC_MARKUP)
+        self.assertNotRegex(STATIC_MARKUP, r"(?i)\bNVIDIA\b|\bNIM\b|z-ai/glm")
         self.assertNotRegex(HTML, r"nvapi-[A-Za-z0-9]")
+        self.assertNotIn("nvidiaModel", MODULE)
+        self.assertNotIn("model:nvidiaModel", MODULE)
+
+    def test_connection_test_errors_are_sanitized_before_display(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not installed")
+        start = MODULE.index("function safeConnectionError")
+        end = MODULE.index("async function testNvidiaConnection", start)
+        helper = MODULE[start:end]
+        exercise = """
+const key=safeConnectionError('NVIDIA API anahtarı reddedildi.',401);
+const busy=safeConnectionError('NVIDIA modeli şu anda yoğun.',503);
+const storage=safeConnectionError('AI kullanım sınırı denetlenemedi.',503);
+const origin=safeConnectionError('İstek aynı web sitesinden gönderilmelidir.',403);
+for(const message of [key,busy,storage,origin])if(/NVIDIA|glm|model/i.test(message))throw new Error('provider details leaked into UI');
+if(!key.includes('anahtar'))throw new Error('key error is not actionable');
+if(!storage.includes('izinlerini'))throw new Error('storage error is not actionable');
+if(!origin.includes('site adresi'))throw new Error('origin error is not actionable');
+"""
+        result = subprocess.run([node, "-e", helper + exercise], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_progress_uses_current_pdf_instead_of_mock_weekly_data(self):
         self.assertNotIn("4 / 6 gün", STATIC_MARKUP)
@@ -85,10 +110,10 @@ class FrontendContractTests(unittest.TestCase):
         helper = MODULE[start:end]
         exercise = """
 const image={role:'user',text:'page question',image:{mimeType:'image/jpeg',data:'sample'}};
-aiHistory.push(image,{role:'model',text:'first answer'});trimAiHistory();
-for(let i=0;i<60;i++){aiHistory.push({role:'user',text:'q'+i});trimAiHistory();aiHistory.push({role:'model',text:'a'+i});trimAiHistory();}
+aiHistory.push(image,{role:'assistant',text:'first answer'});trimAiHistory();
+for(let i=0;i<60;i++){aiHistory.push({role:'user',text:'q'+i});trimAiHistory();aiHistory.push({role:'assistant',text:'a'+i});trimAiHistory();}
 const recent=aiHistory.slice(2);if(aiHistory.length>38)throw new Error('history exceeded proxy window');
-if(aiHistory[0]!==image||aiHistory[1].role!=='model')throw new Error('image context was dropped');
+if(aiHistory[0]!==image||aiHistory[1].role!=='assistant')throw new Error('image context was dropped');
 if(recent.length&&recent[0].role!=='user')throw new Error('window starts with an assistant turn');
 """
         result = subprocess.run([node, "-e", "let aiHistory=[];\n" + helper + exercise], capture_output=True, text=True)

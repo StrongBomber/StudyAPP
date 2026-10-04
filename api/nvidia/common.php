@@ -87,9 +87,18 @@ function studyapp_config(): array
     }
 
     $dotenv = studyapp_parse_env_file(dirname(__DIR__, 2) . '/.env');
-    $apiKey = studyapp_environment_value('NVIDIA_API_KEY', $dotenv);
+    $apiKey = studyapp_environment_value('API_KEY', $dotenv);
+    if ($apiKey === null || trim($apiKey) === '') {
+        $apiKey = studyapp_environment_value('AI_API_KEY', $dotenv);
+    }
+    if ($apiKey === null || trim($apiKey) === '') {
+        $apiKey = studyapp_environment_value('NVIDIA_API_KEY', $dotenv);
+    }
     $enabled = studyapp_environment_value('AI_ENABLED', $dotenv);
-    $model = studyapp_environment_value('NVIDIA_MODEL', $dotenv);
+    $model = studyapp_environment_value('AI_MODEL', $dotenv);
+    if ($model === null || trim($model) === '') {
+        $model = studyapp_environment_value('NVIDIA_MODEL', $dotenv);
+    }
     $rateLimit = studyapp_environment_value('AI_RATE_LIMIT_PER_HOUR', $dotenv);
 
     if ($apiKey !== null) {
@@ -138,7 +147,6 @@ function studyapp_status(): void
     $reason = !$enabled ? 'disabled' : (!$hasKey ? 'missing_key' : (!$hasCurl ? 'missing_curl' : 'ready'));
     studyapp_json(200, [
         'configured' => $reason === 'ready',
-        'model' => studyapp_model($config),
         'reason' => $reason,
     ]);
 }
@@ -244,7 +252,10 @@ function studyapp_test(): void
 
     $config = studyapp_config();
     if (!studyapp_is_configured($config)) {
-        studyapp_json(424, ['error' => ['message' => 'AI hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve NVIDIA_API_KEY ayarlarını kontrol et.']]);
+        studyapp_json(424, ['error' => ['message' => 'AI hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve API_KEY ayarlarını kontrol et.']]);
+    }
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(90);
     }
 
     $limit = max(1, min(500, (int) ($config['rate_limit_per_hour'] ?? 30)));
@@ -264,9 +275,9 @@ function studyapp_test(): void
             ['role' => 'system', 'content' => 'Reply with exactly OK.'],
             ['role' => 'user', 'content' => 'Connection test. Reply with exactly OK.'],
         ],
-        'temperature' => 0,
+        'temperature' => 0.5,
         'top_p' => 1,
-        'max_tokens' => 12,
+        'max_tokens' => 64,
         'stream' => false,
     ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     if ($requestBody === false) {
@@ -286,8 +297,8 @@ function studyapp_test(): void
             'Content-Type: application/json',
             'Accept: application/json',
         ],
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT => 35,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_TIMEOUT => 80,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_USERAGENT => 'StudyAPP/1.0',
@@ -326,7 +337,7 @@ function studyapp_test(): void
     }
 
     $text = $upstream['choices'][0]['message']['content'] ?? '';
-    studyapp_json(200, ['ok' => true, 'model' => $model, 'text' => is_string($text) ? $text : '']);
+    studyapp_json(200, ['ok' => true, 'text' => is_string($text) ? $text : '']);
 }
 
 function studyapp_chat(): void
@@ -341,7 +352,10 @@ function studyapp_chat(): void
 
     $config = studyapp_config();
     if (!studyapp_is_configured($config)) {
-        studyapp_json(424, ['error' => ['message' => 'AI sohbeti hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve NVIDIA_API_KEY ayarlarını kontrol et.']]);
+        studyapp_json(424, ['error' => ['message' => 'AI sohbeti hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve API_KEY ayarlarını kontrol et.']]);
+    }
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(100);
     }
 
     $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
@@ -477,5 +491,5 @@ function studyapp_chat(): void
     if (!is_string($text)) {
         $text = '';
     }
-    studyapp_json(200, ['text' => $text, 'model' => $model]);
+    studyapp_json(200, ['text' => $text]);
 }

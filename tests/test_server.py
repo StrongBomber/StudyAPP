@@ -66,8 +66,25 @@ class ServerContractTests(unittest.TestCase):
         with patch.dict(os.environ, {"NVIDIA_API_KEY": secret, "NVIDIA_MODEL": "test/model", "AI_ENABLED": "true"}):
             status, body = self.request("/api/nvidia/status")
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"configured": True, "model": "test/model", "reason": "ready"})
+        self.assertEqual(body, {"configured": True, "reason": "ready"})
         self.assertNotIn(secret, json.dumps(body))
+
+    def test_status_supports_generic_key_without_exposing_model_configuration(self):
+        secret = "generic-test-secret"
+        env = {
+            "API_KEY": secret,
+            "AI_MODEL": "private/model-name",
+            "NVIDIA_API_KEY": "",
+            "AI_API_KEY": "",
+            "NVIDIA_MODEL": "",
+            "AI_ENABLED": "true",
+        }
+        with patch.dict(os.environ, env):
+            status, body = self.request("/api/nvidia/status")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"configured": True, "reason": "ready"})
+        self.assertNotIn(secret, json.dumps(body))
+        self.assertNotIn("private/model-name", json.dumps(body))
 
     def test_status_can_keep_ai_off_even_when_a_key_exists(self):
         with patch.dict(os.environ, {"NVIDIA_API_KEY": "test-secret", "AI_ENABLED": "false"}):
@@ -77,7 +94,7 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(body["reason"], "disabled")
 
     def test_status_reports_unconfigured_environment(self):
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": "", "AI_ENABLED": "true"}):
+        with patch.dict(os.environ, {"API_KEY": "", "AI_API_KEY": "", "NVIDIA_API_KEY": "", "AI_ENABLED": "true"}):
             status, body = self.request("/api/nvidia/status")
         self.assertEqual(status, 200)
         self.assertFalse(body["configured"])
@@ -91,6 +108,7 @@ class ServerContractTests(unittest.TestCase):
                     [
                         "# private config",
                         "AI_ENABLED=true",
+                        'API_KEY="private-test-value"',
                         'NVIDIA_API_KEY="nvapi-test-value"',
                         "export NVIDIA_MODEL=z-ai/glm-5.3-flash",
                         "malformed line",
@@ -102,6 +120,7 @@ class ServerContractTests(unittest.TestCase):
                 app_server.parse_dotenv_file(dotenv),
                 {
                     "AI_ENABLED": "true",
+                    "API_KEY": "private-test-value",
                     "NVIDIA_API_KEY": "nvapi-test-value",
                     "NVIDIA_MODEL": "z-ai/glm-5.3-flash",
                 },
@@ -141,9 +160,30 @@ class ServerContractTests(unittest.TestCase):
             status, body = self.request("/api/nvidia/chat", payload)
         self.assertEqual(status, 200)
         self.assertEqual(body["text"], "Test yanıtı")
-        self.assertEqual(body["model"], "test/model")
+        self.assertNotIn("model", body)
+        self.assertEqual(captured["request"]["model"], "test/model")
         self.assertEqual(captured["request"]["messages"], payload["messages"])
         self.assertEqual(captured["client"]["api_key"], "test-secret")
+
+    def test_generic_key_and_model_settings_are_server_side_only(self):
+        captured = {}
+        payload = {"messages": [{"role": "user", "content": "Merhaba"}]}
+        env = {
+            "API_KEY": "generic-test-secret",
+            "AI_MODEL": "private/model-name",
+            "AI_API_KEY": "",
+            "NVIDIA_API_KEY": "",
+            "NVIDIA_MODEL": "",
+            "AI_ENABLED": "true",
+        }
+        with patch.dict(os.environ, env), patch.dict(sys.modules, {"openai": self.fake_openai(captured)}):
+            status, body = self.request("/api/nvidia/chat", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"text": "Test yanıtı"})
+        self.assertEqual(captured["request"]["model"], "private/model-name")
+        self.assertEqual(captured["client"]["api_key"], "generic-test-secret")
+        self.assertNotIn("private/model-name", json.dumps(body))
+        self.assertNotIn("generic-test-secret", json.dumps(body))
 
     def test_rejects_unconfigured_server_without_provider_call(self):
         payload = {"messages": [{"role": "user", "content": "Hi"}]}

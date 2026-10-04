@@ -21,7 +21,7 @@ Stylus basıncı ve fiziksel kalem hissi cihazdan cihaza değişir; uygun bir ci
 
 - Yerel geliştirme için Python 3.10 veya üzeri
 - InfinityFree tarafında yapay zekâ proxy’si için PHP ve cURL
-- NVIDIA NIM erişimi ve `NVIDIA_API_KEY` (yalnızca yapay zekâ sohbeti için)
+- NVIDIA NIM erişimi ve `API_KEY` (yalnızca yapay zekâ sohbeti için)
 - İsteğe bağlı: testlerde JavaScript sözdizimi kontrolü için Node.js
 
 PDF.js, pdf-lib ve KaTeX dosyaları `vendor/` altında depolanır; ön yüz için npm derleme adımı gerekmez. InfinityFree’ye yüklenirken Python sunucusu kullanılmaz; yapay zekâ PHP uç noktalarından geçer.
@@ -41,7 +41,7 @@ Yapay zekâ için gizli `.env` dosyasını örnekten oluşturun ve yalnızca bu 
 
 ```bash
 cp .env.example .env
-# .env içindeki NVIDIA_API_KEY satırına kendi anahtarını yaz
+# .env içindeki API_KEY satırına kendi anahtarını yaz
 .venv/bin/python server.py
 ```
 
@@ -58,11 +58,11 @@ py -m venv .venv
 
 ```powershell
 Copy-Item .env.example .env
-# .env dosyasını açıp NVIDIA_API_KEY satırına kendi anahtarını yaz
+# .env dosyasını açıp API_KEY satırına kendi anahtarını yaz
 .\.venv\Scripts\python.exe server.py
 ```
 
-Modeli değiştirmek için `.env` içindeki `NVIDIA_MODEL` değerini güncelleyin; varsayılan model `z-ai/glm-5.3-flash`’tir. Ortam değişkenleri `.env` değerlerinden önceliklidir.
+İsterseniz varsayılan model ayarını `.env` içindeki `AI_MODEL` ile değiştirebilirsiniz. Ortam değişkenleri `.env` değerlerinden önceliklidir; `NVIDIA_MODEL` eski kurulumlarla uyumluluk için desteklenir.
 
 ## InfinityFree’ye dağıtım
 
@@ -72,7 +72,7 @@ InfinityFree’de yayınlamak için PHP dağıtım dosyalarını hazırlayın:
 bash scripts/build-infinityfree.sh
 ```
 
-Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. `.env.example` dosyasını sunucuda `htdocs/.env` adıyla kopyalayıp `NVIDIA_API_KEY` satırını doldurarak AI’ı etkinleştirin. Gerçek `.env` Git’e eklenmez ve kök `.htaccess` üzerinden HTTP ile okunması engellenir. Ayrıntılı kurulum [`INFINITYFREE.md`](INFINITYFREE.md) içindedir.
+Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. `.env.example` dosyasını sunucuda `htdocs/.env` adıyla kopyalayıp `API_KEY` satırını doldurarak AI’ı etkinleştirin. Gerçek `.env` Git’e eklenmez ve kök `.htaccess` üzerinden HTTP ile okunması engellenir. Ayrıntılı kurulum [`INFINITYFREE.md`](INFINITYFREE.md) içindedir.
 
 ## GitHub deposuna yükleme
 

@@ -86,6 +86,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
                     [
                         "# comment",
                         "AI_ENABLED=true",
+                        'API_KEY="generic-private-test"',
                         'NVIDIA_API_KEY="nvapi-private-test"',
                         "export NVIDIA_MODEL=z-ai/glm-5.3-flash",
                         "INVALID LINE",
@@ -108,10 +109,37 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
                 json.loads(result.stdout),
                 {
                     "AI_ENABLED": "true",
+                    "API_KEY": "generic-private-test",
                     "NVIDIA_API_KEY": "nvapi-private-test",
                     "NVIDIA_MODEL": "z-ai/glm-5.3-flash",
                 },
             )
+
+    @unittest.skipUnless(shutil.which("php"), "PHP CLI is not installed")
+    def test_php_config_accepts_generic_key_and_keeps_model_out_of_status(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            probe = Path(temporary_directory) / "probe.php"
+            probe.write_text(
+                "<?php "
+                "require $argv[1]; "
+                "putenv('API_KEY=generic-test-key'); "
+                "putenv('AI_API_KEY='); putenv('NVIDIA_API_KEY='); "
+                "putenv('AI_MODEL=private-model'); putenv('NVIDIA_MODEL='); "
+                "putenv('AI_ENABLED=true'); "
+                "$config=studyapp_config(); "
+                "if (($config['nvidia_api_key'] ?? '') !== 'generic-test-key' || studyapp_model($config) !== 'private-model') exit(3); "
+                "$_SERVER['REQUEST_METHOD']='GET'; studyapp_status();",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["php", str(probe), str(ROOT / "api" / "nvidia" / "common.php")],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            status = json.loads(result.stdout)
+            self.assertEqual(set(status), {"configured", "reason"})
+            self.assertNotIn("private-model", result.stdout)
 
 
 if __name__ == "__main__":
