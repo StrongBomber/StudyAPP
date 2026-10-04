@@ -39,14 +39,18 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("requestWithRetry('/api/nvidia/chat.php'", MODULE)
         self.assertNotIn("NVIDIA_API_KEY", MODULE)
 
-    def test_ai_setup_uses_a_private_env_file_and_server_side_connection_test(self):
+    def test_ai_setup_uses_a_private_server_config_and_connection_test(self):
         self.assertIn('id="aiSetupModal"', STATIC_MARKUP)
         self.assertIn('id="aiTestConnectionBtn"', STATIC_MARKUP)
         self.assertIn('id="newAiChatBtn"', STATIC_MARKUP)
         self.assertIn("fetch('/api/nvidia/test.php'", MODULE)
-        self.assertIn("function copyAiEnvExample()", MODULE)
+        self.assertIn("function copyAiConfigExample()", MODULE)
+        self.assertIn("config.example.php", STATIC_MARKUP)
+        self.assertIn("config.php", STATIC_MARKUP)
+        self.assertIn("'api_key'", STATIC_MARKUP)
+        self.assertNotIn(".env.example", STATIC_MARKUP)
+        self.assertNotIn("<code>.env</code>", STATIC_MARKUP)
         self.assertNotIn('id="apiKeyInput"', STATIC_MARKUP)
-        self.assertIn("API_KEY=", STATIC_MARKUP)
         self.assertNotIn("AI_API_KEY", STATIC_MARKUP)
         self.assertNotRegex(STATIC_MARKUP, r"(?i)\bNVIDIA\b|\bNIM\b|z-ai/glm")
         self.assertNotRegex(HTML, r"nvapi-[A-Za-z0-9]")

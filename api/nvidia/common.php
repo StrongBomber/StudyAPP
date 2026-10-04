@@ -80,19 +80,29 @@ function studyapp_environment_value(string $name, array $dotenv): ?string
 function studyapp_config(): array
 {
     $config = [];
-    $path = __DIR__ . '/config.php';
+    $path = dirname(__DIR__, 2) . '/config.php';
+    if (!is_file($path)) {
+        $path = __DIR__ . '/config.php';
+    }
     if (is_file($path)) {
         $loaded = require $path;
         $config = is_array($loaded) ? $loaded : [];
     }
 
     $dotenv = studyapp_parse_env_file(dirname(__DIR__, 2) . '/.env');
+    $configApiKey = $config['api_key'] ?? null;
+    if (!is_string($configApiKey) || trim($configApiKey) === '') {
+        $configApiKey = $config['nvidia_api_key'] ?? null;
+    }
     $apiKey = studyapp_environment_value('API_KEY', $dotenv);
     if ($apiKey === null || trim($apiKey) === '') {
         $apiKey = studyapp_environment_value('AI_API_KEY', $dotenv);
     }
     if ($apiKey === null || trim($apiKey) === '') {
         $apiKey = studyapp_environment_value('NVIDIA_API_KEY', $dotenv);
+    }
+    if (($apiKey === null || trim($apiKey) === '') && is_string($configApiKey)) {
+        $apiKey = $configApiKey;
     }
     $enabled = studyapp_environment_value('AI_ENABLED', $dotenv);
     $model = studyapp_environment_value('AI_MODEL', $dotenv);
@@ -108,7 +118,7 @@ function studyapp_config(): array
         $parsedEnabled = filter_var($enabled, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $config['enabled'] = $parsedEnabled === true;
     } elseif (!array_key_exists('enabled', $config)) {
-        $config['enabled'] = false;
+        $config['enabled'] = $apiKey !== null && trim($apiKey) !== '';
     }
     if ($model !== null && trim($model) !== '') {
         $config['nvidia_model'] = trim($model);
@@ -252,7 +262,7 @@ function studyapp_test(): void
 
     $config = studyapp_config();
     if (!studyapp_is_configured($config)) {
-        studyapp_json(424, ['error' => ['message' => 'AI hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve API_KEY ayarlarını kontrol et.']]);
+        studyapp_json(424, ['error' => ['message' => 'AI yapılandırması eksik. Sunucu API_KEY değişkenini veya kök config.php dosyasını kontrol et.']]);
     }
     if (function_exists('set_time_limit')) {
         @set_time_limit(90);
@@ -352,7 +362,7 @@ function studyapp_chat(): void
 
     $config = studyapp_config();
     if (!studyapp_is_configured($config)) {
-        studyapp_json(424, ['error' => ['message' => 'AI sohbeti hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve API_KEY ayarlarını kontrol et.']]);
+        studyapp_json(424, ['error' => ['message' => 'AI yapılandırması eksik. Sunucu API_KEY değişkenini veya kök config.php dosyasını kontrol et.']]);
     }
     if (function_exists('set_time_limit')) {
         @set_time_limit(100);

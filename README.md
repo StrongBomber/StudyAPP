@@ -72,7 +72,7 @@ InfinityFree’de yayınlamak için PHP dağıtım dosyalarını hazırlayın:
 bash scripts/build-infinityfree.sh
 ```
 
-Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. `.env.example` dosyasını sunucuda `htdocs/.env` adıyla kopyalayıp `API_KEY` satırını doldurarak AI’ı etkinleştirin. Gerçek `.env` Git’e eklenmez ve kök `.htaccess` üzerinden HTTP ile okunması engellenir. Ayrıntılı kurulum [`INFINITYFREE.md`](INFINITYFREE.md) içindedir.
+Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu, yerel `.env.example` dosyası ve test dosyaları pakete alınmaz. AI için `config.example.php` dosyasını sunucuda `config.php` adıyla kopyalayın ve `api_key` alanına yeni anahtarınızı girin; hosting ortamında `API_KEY` tanımlıysa dosyaya gerek kalmaz. Gerçek `config.php` Git’e eklenmez ve HTTP ile okunması engellenir. Ayrıntılı kurulum [`INFINITYFREE.md`](INFINITYFREE.md) içindedir.
 
 ## GitHub deposuna yükleme
 
@@ -87,7 +87,7 @@ git remote add origin https://github.com/USERNAME/REPOSITORY.git
 git push -u origin main
 ```
 
-`.gitignore` yerel anahtar dosyalarını (`.env`), Python sanal ortamlarını, önbellekleri ve arşivleri hariç tutar. Depoya yalnızca paylaşmayı amaçladığınız dosyaları eklediğinizi `git status` ile kontrol edin.
+`.gitignore` yerel anahtar dosyalarını (`.env`, `config.php`), Python sanal ortamlarını, önbellekleri ve arşivleri hariç tutar. Depoya yalnızca paylaşmayı amaçladığınız dosyaları eklediğinizi `git status` ile kontrol edin.
 
 ## Güvenlik ve gizlilik
 
@@ -117,9 +117,10 @@ Testler sunucu doğrulamalarını ve ön yüz sözleşmelerini denetler; gerçek
 ```text
 .
 ├── index.html                 # Web uygulaması
-├── .env.example               # Güvenli API yapılandırma şablonu
-├── server.py                  # Yerel statik sunucu ve NVIDIA proxy’si
-├── api/nvidia/                # InfinityFree PHP uç noktaları ve örnek ayar
+├── .env.example               # Yerel geliştirme için anahtar şablonu
+├── config.example.php         # InfinityFree için sunucu tarafı yapılandırma şablonu
+├── server.py                  # Yerel statik sunucu ve AI proxy’si
+├── api/nvidia/                # InfinityFree PHP API uç noktaları
 ├── scripts/build-infinityfree.sh
 ├── requirements.txt           # Yerel Python sunucu bağımlılıkları
 ├── assets/demo.pdf            # Örnek PDF

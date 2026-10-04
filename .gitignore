@@ -21,6 +21,7 @@ Thumbs.db
 .vscode/
 
 # Local secrets and proxy rate-limit state
+/config.php
 /api/nvidia/config.php
 /api/nvidia/.rate-limit.json
 

@@ -41,7 +41,7 @@ jobs:
         run: python -m py_compile server.py tests/*.py
 
       - name: Check PHP syntax
-        run: for file in api/nvidia/*.php; do php -l "$file"; done
+        run: for file in config.example.php api/nvidia/*.php; do php -l "$file"; done
 
       - name: Run tests
         run: python -m unittest discover -s tests -v

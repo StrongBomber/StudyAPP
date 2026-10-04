@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -22,14 +23,13 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
 
             for relative_path in (
                 ".htaccess",
-                ".env.example",
+                "config.example.php",
                 "index.html",
                 "assets/demo.pdf",
                 "vendor/pdf.min.mjs",
                 "api/nvidia/.htaccess",
                 "api/nvidia/chat.php",
                 "api/nvidia/common.php",
-                "api/nvidia/config.example.php",
                 "api/nvidia/status.php",
                 "api/nvidia/test.php",
             ):
@@ -37,7 +37,10 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
 
             self.assertIn("AddType text/javascript .mjs", (output / ".htaccess").read_text())
             self.assertIn("<FilesMatch \"^\\.env", (output / ".htaccess").read_text())
+            self.assertIn("<FilesMatch \"^config", (output / ".htaccess").read_text())
             self.assertFalse((output / ".env").exists())
+            self.assertFalse((output / ".env.example").exists())
+            self.assertFalse((output / "config.php").exists())
             self.assertFalse((output / "server.py").exists())
             self.assertFalse((output / "requirements.txt").exists())
             self.assertFalse((output / "api/nvidia/config.php").exists())
@@ -55,7 +58,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
         self.assertTrue((ROOT / ".git" / "HEAD").is_file())
 
     def test_server_secret_and_rate_limit_state_are_ignored_by_git(self):
-        for path in (".env", "api/nvidia/config.php", "api/nvidia/.rate-limit.json"):
+        for path in (".env", "config.php", "api/nvidia/config.php", "api/nvidia/.rate-limit.json"):
             result = subprocess.run(
                 ["git", "check-ignore", "-q", path],
                 cwd=ROOT,
@@ -73,7 +76,8 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("php"), "PHP CLI is not installed")
     def test_php_proxy_files_pass_php_lint(self):
-        for path in sorted((ROOT / "api" / "nvidia").glob("*.php")):
+        php_files = [ROOT / "config.example.php", *sorted((ROOT / "api" / "nvidia").glob("*.php"))]
+        for path in php_files:
             result = subprocess.run(["php", "-l", str(path)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -122,12 +126,11 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
             probe.write_text(
                 "<?php "
                 "require $argv[1]; "
-                "putenv('API_KEY=generic-test-key'); "
+                "putenv('API_KEY=generic-test-key'); putenv('AI_ENABLED='); "
                 "putenv('AI_API_KEY='); putenv('NVIDIA_API_KEY='); "
                 "putenv('AI_MODEL=private-model'); putenv('NVIDIA_MODEL='); "
-                "putenv('AI_ENABLED=true'); "
                 "$config=studyapp_config(); "
-                "if (($config['nvidia_api_key'] ?? '') !== 'generic-test-key' || studyapp_model($config) !== 'private-model') exit(3); "
+                "if (($config['nvidia_api_key'] ?? '') !== 'generic-test-key' || studyapp_model($config) !== 'private-model' || ($config['enabled'] ?? false) !== true) exit(3); "
                 "$_SERVER['REQUEST_METHOD']='GET'; studyapp_status();",
                 encoding="utf-8",
             )
@@ -140,6 +143,38 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
             status = json.loads(result.stdout)
             self.assertEqual(set(status), {"configured", "reason"})
             self.assertNotIn("private-model", result.stdout)
+
+    @unittest.skipUnless(shutil.which("php"), "PHP CLI is not installed")
+    def test_php_reads_key_from_root_config_without_dotenv(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = Path(temporary_directory)
+            api_directory = project / "api" / "nvidia"
+            api_directory.mkdir(parents=True)
+            shutil.copyfile(ROOT / "api" / "nvidia" / "common.php", api_directory / "common.php")
+            (project / "config.php").write_text(
+                "<?php return ['enabled' => true, 'api_key' => 'server-side-test-key', 'rate_limit_per_hour' => 30];",
+                encoding="utf-8",
+            )
+            probe = project / "probe.php"
+            probe.write_text(
+                "<?php require $argv[1]; $config=studyapp_config(); "
+                "echo json_encode(['enabled'=>$config['enabled']??false, 'key'=>$config['nvidia_api_key']??'', 'limit'=>$config['rate_limit_per_hour']??0]);",
+                encoding="utf-8",
+            )
+            clean_env = os.environ.copy()
+            for name in ("API_KEY", "AI_API_KEY", "NVIDIA_API_KEY", "AI_ENABLED", "AI_MODEL", "NVIDIA_MODEL", "AI_RATE_LIMIT_PER_HOUR"):
+                clean_env.pop(name, None)
+            result = subprocess.run(
+                ["php", str(probe), str(api_directory / "common.php")],
+                capture_output=True,
+                text=True,
+                env=clean_env,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {"enabled": True, "key": "server-side-test-key", "limit": 30},
+            )
 
 
 if __name__ == "__main__":

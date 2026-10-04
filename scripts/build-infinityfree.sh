@@ -29,10 +29,10 @@ esac
 rm -rf -- "$OUT"
 mkdir -p "$OUT/api/nvidia"
 cp -- "$ROOT/.htaccess" "$OUT/.htaccess"
-cp -- "$ROOT/.env.example" "$OUT/.env.example"
+cp -- "$ROOT/config.example.php" "$OUT/config.example.php"
 cp -- "$ROOT/index.html" "$OUT/index.html"
 cp -a -- "$ROOT/assets" "$ROOT/vendor" "$OUT/"
-for file in .htaccess common.php status.php test.php chat.php config.example.php; do
+for file in .htaccess common.php status.php test.php chat.php; do
   cp -- "$ROOT/api/nvidia/$file" "$OUT/api/nvidia/$file"
 done
 

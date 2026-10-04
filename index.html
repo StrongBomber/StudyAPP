@@ -220,12 +220,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <section class="api-dialog ai-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="aiSetupTitle" aria-describedby="aiSetupIntro">
     <div class="api-dialog-head"><div class="api-dialog-mark"><svg class="icon"><use href="#i-key"/></svg></div><button class="head-icon" id="closeAiSetupBtn" type="button" aria-label="Kurulum rehberini kapat"><svg class="icon"><use href="#i-close"/></svg></button></div>
     <h2 id="aiSetupTitle">AI asistanını güvenle bağla</h2>
-    <p class="api-dialog-intro" id="aiSetupIntro">API anahtarını bu sayfaya yazma. Anahtar yalnızca sunucudaki <code>.env</code> dosyasında saklanır.</p>
-    <ol class="ai-setup-steps"><li><strong>Şablonu sunucuya kopyala.</strong> <code>.env.example</code> dosyasını hostingde <code>.env</code> adıyla kopyala (yoksa yeni dosya oluştur).</li><li><strong>Yalnızca sunucu dosyasını düzenle.</strong> <code>API_KEY=</code> satırına API anahtarını ekle ve <code>AI_ENABLED=true</code> bırak.</li><li><strong>Kaydet, sonra yenile.</strong> “Kaydettim — test et” düğmesiyle ayarları doğrula.</li></ol>
-    <div class="env-snippet-wrap"><div class="env-snippet-head"><strong>.env örneği</strong><button id="copyAiEnvSnippet" type="button"><svg class="icon"><use href="#i-copy"/></svg><span>Şablonu kopyala</span></button></div><pre class="env-snippet"><code id="aiEnvSnippet">AI_ENABLED=true
-API_KEY=
-AI_RATE_LIMIT_PER_HOUR=30</code></pre></div>
-    <div class="api-privacy"><svg class="icon"><use href="#i-eye"/></svg><span>Gerçek anahtarı yalnızca sunucudaki <code>.env</code> dosyasına yaz. Bu dosyanın web üzerinden indirilmesi engellenir.</span></div>
+    <p class="api-dialog-intro" id="aiSetupIntro">Anahtarı bu sayfaya yazma. Sunucuda <code>API_KEY</code> değişkeni olarak veya korumalı <code>config.php</code> dosyasında sakla.</p>
+    <ol class="ai-setup-steps"><li><strong>Sunucu yapılandırmasını oluştur.</strong> Web kökündeki <code>config.example.php</code> dosyasını <code>config.php</code> adıyla kopyala.</li><li><strong>Anahtarı sunucuda ayarla.</strong> <code>API_KEY</code> sunucu değişkenini kullan veya <code>config.php</code> içindeki <code>'api_key'</code> alanına yeni anahtarını yaz; <code>enabled</code> değerini <code>true</code> bırak.</li><li><strong>Kaydet ve test et.</strong> “Kaydettim — test et” düğmesiyle bağlantıyı doğrula.</li></ol>
+    <div class="config-snippet-wrap"><div class="config-snippet-head"><strong>config.php örneği</strong><button id="copyAiConfigSnippet" type="button"><svg class="icon"><use href="#i-copy"/></svg><span>Örneği kopyala</span></button></div><pre class="config-snippet"><code id="aiConfigSnippet">&lt;?php
+return [
+    'enabled' =&gt; true,
+    'api_key' =&gt; '',
+    'rate_limit_per_hour' =&gt; 30,
+];</code></pre></div>
+    <div class="api-privacy"><svg class="icon"><use href="#i-eye"/></svg><span>Gerçek anahtarı yalnızca sunucudaki <code>config.php</code> dosyasına yaz. Dosyanın HTTP ile indirilmesi engellenir ve Git’te izlenmez.</span></div>
     <div class="api-dialog-actions"><span class="ai-setup-feedback" id="aiSetupFeedback" role="status" aria-live="polite"></span><button class="header-btn primary" id="verifyAiSetupBtn" type="button"><svg class="icon"><use href="#i-refresh"/></svg> Kaydettim — test et</button></div>
   </section>
 </div>
@@ -370,7 +373,7 @@ async function testNvidiaConnection(){
 }
 function openAiSetupModal(){const modal=$('#aiSetupModal');if(modal.classList.contains('open'))return;setupFocusReturn=document.activeElement;modal.classList.add('open');modal.setAttribute('aria-hidden','false');requestAnimationFrame(()=>$('#closeAiSetupBtn').focus());}
 function closeAiSetupModal(){const modal=$('#aiSetupModal');modal.classList.remove('open');modal.setAttribute('aria-hidden','true');if(setupFocusReturn instanceof HTMLElement)setupFocusReturn.focus();setupFocusReturn=null;}
-async function copyAiEnvExample(){const text=$('#aiEnvSnippet').textContent.trim();let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);copied=true;}}catch(_){}if(!copied){const field=document.createElement('textarea');field.value=text;field.setAttribute('aria-hidden','true');field.style.cssText='position:fixed;opacity:0;left:-10000px;top:0';document.body.appendChild(field);field.select();try{copied=document.execCommand('copy');}catch(_){}field.remove();}$('#aiSetupFeedback').textContent=copied?'Şablon kopyalandı. Gerçek anahtarını yalnızca sunucudaki .env dosyasına yaz.':'Kopyalama başarısız. Şablonu seçip elle kopyalayabilirsin.';}
+async function copyAiConfigExample(){const text=$('#aiConfigSnippet').textContent.trim();let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);copied=true;}}catch(_){}if(!copied){const field=document.createElement('textarea');field.value=text;field.setAttribute('aria-hidden','true');field.style.cssText='position:fixed;opacity:0;left:-10000px;top:0';document.body.appendChild(field);field.select();try{copied=document.execCommand('copy');}catch(_){}field.remove();}$('#aiSetupFeedback').textContent=copied?'Yapılandırma kopyalandı. Yeni anahtarını yalnızca sunucudaki config.php dosyasına yaz.':'Kopyalama başarısız. Örneği seçip elle kopyalayabilirsin.';}
 function updateAiUi(){
   const hasText=!!el.aiInput.value.trim(),turns=aiTurnCount,pageReady=!!pdfDoc&&el.wait.style.display==='none';
   el.sendAiBtn.disabled=!hasText||isAiSending||!aiProviderReady()||!!pdfDoc&&!selectedCropData&&!pageReady;
@@ -632,7 +635,7 @@ async function sendAiMessage(){
 
 // Toolbar and controls
 $('#assistantOpenBtn').addEventListener('click',()=>{if(assistantIsOpen())closeAssistant();else openAssistant();});
-$('#aiSetupOpenBtn').addEventListener('click',openAiSetupModal);$('#closeAiSetupBtn').addEventListener('click',closeAiSetupModal);$('#aiSetupModal').addEventListener('pointerdown',event=>{if(event.target===$('#aiSetupModal'))closeAiSetupModal();});$('#copyAiEnvSnippet').addEventListener('click',copyAiEnvExample);$('#aiStatusRefreshBtn').addEventListener('click',()=>void syncNvidiaStatus());$('#verifyAiSetupBtn').addEventListener('click',async()=>{const ready=await syncNvidiaStatus();if(ready)await testNvidiaConnection();else $('#aiSetupFeedback').textContent=nvidiaStatusDetail;});$('#aiTestConnectionBtn').addEventListener('click',()=>void testNvidiaConnection());$('#newAiChatBtn').addEventListener('click',()=>{resetAiConversation();el.aiInput.focus();toast('Yeni sohbet hazır.');});
+$('#aiSetupOpenBtn').addEventListener('click',openAiSetupModal);$('#closeAiSetupBtn').addEventListener('click',closeAiSetupModal);$('#aiSetupModal').addEventListener('pointerdown',event=>{if(event.target===$('#aiSetupModal'))closeAiSetupModal();});$('#copyAiConfigSnippet').addEventListener('click',copyAiConfigExample);$('#aiStatusRefreshBtn').addEventListener('click',()=>void syncNvidiaStatus());$('#verifyAiSetupBtn').addEventListener('click',async()=>{const ready=await syncNvidiaStatus();if(ready)await testNvidiaConnection();else $('#aiSetupFeedback').textContent=nvidiaStatusDetail;});$('#aiTestConnectionBtn').addEventListener('click',()=>void testNvidiaConnection());$('#newAiChatBtn').addEventListener('click',()=>{resetAiConversation();el.aiInput.focus();toast('Yeni sohbet hazır.');});
 $('#aiInput').addEventListener('input',updateAiUi);$('#aiInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendAiMessage();}});$('#sendAiBtn').addEventListener('click',sendAiMessage);
 $('#aiSuggestions').addEventListener('click',event=>{const button=event.target.closest('[data-prompt]');if(!button)return;el.aiInput.value=button.dataset.prompt;updateAiUi();sendAiMessage();});
 $('#recropBtn').addEventListener('click',()=>{setTool('crop');if(assistantIsOpen())closeAssistant();toast('Sorunun tamamını çerçevele.');});$('#clearCropBtn').addEventListener('click',resetCropAndView);
@@ -878,18 +881,18 @@ input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user
 .ai-setup-steps{display:grid;gap:8px;margin:0 0 13px;padding:0 0 0 21px;color:#7f8492;font-size:10px;line-height:1.55}
 .ai-setup-steps li{padding-left:2px}
 .ai-setup-steps strong{color:#4f5564}
-.env-snippet-wrap{overflow:hidden;border:1px solid #e5e6ef;border-radius:10px;background:#f8f9fc}
-.env-snippet-head{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 9px;border-bottom:1px solid #e8e9f0}
-.env-snippet-head strong{font-size:9px;color:#5b6170}
-.env-snippet-head button{height:24px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid #e3e4ed;border-radius:6px;background:#fff;color:#626a7a;font-size:8px;font-weight:650;cursor:pointer}
-.env-snippet-head button:hover{border-color:#cfd2f2;color:#535dd8}
-.env-snippet-head .icon{width:12px;height:12px}
-.env-snippet{max-height:108px;overflow:auto;margin:0;padding:9px 11px;color:#535b6b;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
-.env-snippet code{color:inherit;user-select:text;-webkit-user-select:text}
+.config-snippet-wrap{overflow:hidden;border:1px solid #e5e6ef;border-radius:10px;background:#f8f9fc}
+.config-snippet-head{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 9px;border-bottom:1px solid #e8e9f0}
+.config-snippet-head strong{font-size:9px;color:#5b6170}
+.config-snippet-head button{height:24px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid #e3e4ed;border-radius:6px;background:#fff;color:#626a7a;font-size:8px;font-weight:650;cursor:pointer}
+.config-snippet-head button:hover{border-color:#cfd2f2;color:#535dd8}
+.config-snippet-head .icon{width:12px;height:12px}
+.config-snippet{max-height:108px;overflow:auto;margin:0;padding:9px 11px;color:#535b6b;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
+.config-snippet code{color:inherit;user-select:text;-webkit-user-select:text}
 .ai-setup-dialog .api-privacy{margin-top:11px;font-size:9px}
 .ai-setup-dialog .api-dialog-actions{margin-top:12px}
 .ai-setup-feedback{min-width:0;flex:1;color:#6d7482;font-size:9px;line-height:1.4}
-@media(max-width:470px){.ai-setup-dialog{padding:17px 15px 14px}.ai-setup-steps{font-size:9px}.env-snippet{font-size:9px}.ai-connection-copy span{max-width:175px}}
+@media(max-width:470px){.ai-setup-dialog{padding:17px 15px 14px}.ai-setup-steps{font-size:9px}.config-snippet{font-size:9px}.ai-connection-copy span{max-width:175px}}
 </style>
 </body>
 </html>
