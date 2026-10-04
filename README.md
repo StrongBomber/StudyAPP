@@ -1,8 +1,8 @@
 # Çözüm — PDF çalışma alanı
 
-PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış bir çalışma alanı. Arayüz, PDF görüntüleme ve işaretleme istemci tarafında çalışır. İsteğe bağlı yapay zekâ sohbeti ise anahtarı tarayıcıya vermeden yerel Python proxy’si üzerinden NVIDIA NIM’e bağlanır.
+PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış bir çalışma alanı. PDF görüntüleme ve işaretleme tarayıcıda çalışır. İsteğe bağlı yapay zekâ sohbeti anahtarı istemciye açmadan NVIDIA NIM’e bağlanır: yerel geliştirmede `server.py`, InfinityFree dağıtımında PHP uç noktaları kullanılır.
 
-> Bu proje bir **Python sunucusu** gerektirir. GitHub Pages tek başına Python proxy’sini çalıştırmaz; NVIDIA anahtarını HTML/JavaScript’e ekleyerek bu sınırlamayı aşmaya çalışmayın.
+> InfinityFree Python uygulaması çalıştırmaz. Bu nedenle InfinityFree’ye özel PHP proxy’si eklendi; NVIDIA anahtarını HTML/JavaScript’e koymayın. Kurulum adımları için [`INFINITYFREE.md`](INFINITYFREE.md) dosyasına bakın.
 
 ## Özellikler
 
@@ -19,11 +19,12 @@ Stylus basıncı ve fiziksel kalem hissi cihazdan cihaza değişir; uygun bir ci
 
 ## Gereksinimler
 
-- Python 3.10 veya üzeri
+- Yerel geliştirme için Python 3.10 veya üzeri
+- InfinityFree tarafında yapay zekâ proxy’si için PHP ve cURL
 - NVIDIA NIM erişimi ve `NVIDIA_API_KEY` (yalnızca yapay zekâ sohbeti için)
 - İsteğe bağlı: testlerde JavaScript sözdizimi kontrolü için Node.js
 
-PDF.js, pdf-lib ve KaTeX dosyaları `vendor/` altında depolanır; ön yüz için npm derleme adımı gerekmez.
+PDF.js, pdf-lib ve KaTeX dosyaları `vendor/` altında depolanır; ön yüz için npm derleme adımı gerekmez. InfinityFree’ye yüklenirken Python sunucusu kullanılmaz; yapay zekâ PHP uç noktalarından geçer.
 
 ## Yerelde çalıştırma
 
@@ -68,6 +69,16 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPtr) }
 
 Modeli değiştirmek isterseniz sunucuyu başlatmadan önce `NVIDIA_MODEL` ortam değişkenini ayarlayın; varsayılan model `z-ai/glm-5.3-flash`’tir.
 
+## InfinityFree’ye dağıtım
+
+InfinityFree’de yayınlamak için PHP dağıtım dosyalarını hazırlayın:
+
+```bash
+bash scripts/build-infinityfree.sh
+```
+
+Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. Yapay zekâ varsayılan olarak kapalıdır; etkinleştirmek ve alan adı/DNS ayarlarını yapmak için [`INFINITYFREE.md`](INFINITYFREE.md) adımlarını izleyin. Gerçek NVIDIA anahtarını yalnızca hosting hesabındaki `api/nvidia/config.php` dosyasına yazın; bu dosya Git’e eklenmez.
+
 ## GitHub deposuna yükleme
 
 Zip’i açtıktan sonra proje klasöründe çalıştırın; `USERNAME` ve `REPOSITORY` değerlerini kendi GitHub bilgilerinizle değiştirin:
@@ -86,9 +97,9 @@ git push -u origin main
 ## Güvenlik ve gizlilik
 
 - Gerçek anahtarı kaynak dosyalarına, commit’lere, issue’lara veya herkese açık depoya koymayın. Anahtar yanlışlıkla paylaşıldıysa NVIDIA panelinden iptal edip yenisini oluşturun.
-- `server.py` yerel geliştirme içindir; proxy’ye kimlik doğrulama ve hız sınırlama eklenmemiştir. Sunucuyu herkese açık ağa bağlamayın veya doğrudan internete dağıtmayın.
-- GitHub Pages Python API’sini çalıştırmaz. İnternete dağıtım için ayrı, kimlik doğrulamalı bir backend kurun ve anahtarı yalnızca backend’in güvenli ortam değişkeninde saklayın.
-- PDF’ler ve notlar uygulama sunucusuna yüklenmez; tarayıcıda saklanır. Asistana gönderilen sohbet içeriği (ilk soruda açık sayfanın küçültülmüş görüntüsü dâhil) yerel proxy üzerinden NVIDIA servisine iletilir.
+- `server.py` yerel geliştirme içindir; internete açık sunucu olarak kullanmayın. InfinityFree PHP proxy’si anahtarı sunucu tarafında tutar ve IP başına saatlik sınır uygular; yine de AI uç noktası site ziyaretçilerine açıktır. AI’ı etkinleştirirseniz NVIDIA kotanızın başkaları tarafından kullanılabileceğini unutmayın.
+- GitHub Pages Python veya PHP API’sini çalıştırmaz. InfinityFree dağıtımı için `scripts/build-infinityfree.sh` paketini kullanın.
+- PDF’ler ve notlar uygulama sunucusuna yüklenmez; tarayıcıda saklanır. Asistana gönderilen sohbet içeriği (ilk soruda açık sayfanın küçültülmüş görüntüsü dâhil) seçili backend üzerinden NVIDIA servisine iletilir.
 
 ## Testler
 
@@ -111,11 +122,13 @@ Testler sunucu doğrulamalarını ve ön yüz sözleşmelerini denetler; gerçek
 ```text
 .
 ├── index.html                 # Web uygulaması
-├── server.py                  # Statik sunucu ve NVIDIA API proxy’si
-├── requirements.txt           # Python sunucu bağımlılıkları
+├── server.py                  # Yerel statik sunucu ve NVIDIA proxy’si
+├── api/nvidia/                # InfinityFree PHP uç noktaları ve örnek ayar
+├── scripts/build-infinityfree.sh
+├── requirements.txt           # Yerel Python sunucu bağımlılıkları
 ├── assets/demo.pdf            # Örnek PDF
 ├── vendor/                    # PDF.js, pdf-lib, KaTeX ve lisansları
-├── tests/                     # Python ve ön yüz sözleşme testleri
+├── tests/                     # Python, ön yüz ve dağıtım testleri
 └── .github/workflows/tests.yml
 ```
 

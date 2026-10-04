@@ -19,6 +19,10 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Local secrets and proxy rate-limit state
+/api/nvidia/config.php
+/api/nvidia/.rate-limit.json
+
 # Local archives and generated build outputs
 *.zip
 build/

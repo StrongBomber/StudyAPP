@@ -1,0 +1,4 @@
+# Keep server-side code, configuration, and rate-limit data out of direct requests.
+<FilesMatch "^(common\.php|config(\.example)?\.php|\.rate-limit\.json)$">
+    Require all denied
+</FilesMatch>

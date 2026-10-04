@@ -26,6 +26,8 @@ class AppHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         route = urlsplit(self.path).path
+        if route.endswith(".php"):
+            route = route[:-4]
         if route == "/api/nvidia/status":
             model = os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
             self._json(200, {"configured": bool(os.environ.get("NVIDIA_API_KEY", "").strip()), "model": model})
@@ -34,6 +36,8 @@ class AppHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         route = urlsplit(self.path).path
+        if route.endswith(".php"):
+            route = route[:-4]
         if route not in {"/api/nvidia/chat", "/api/nvidia/test"}:
             self._json(404, {"error": {"message": "API endpoint not found."}})
             return

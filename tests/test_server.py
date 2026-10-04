@@ -74,6 +74,16 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertFalse(body["configured"])
 
+    def test_php_compatible_api_paths_work_with_local_python_server(self):
+        payload = {"messages": [{"role": "user", "content": "Merhaba"}]}
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": ""}):
+            status, body = self.request("/api/nvidia/status.php")
+            self.assertEqual(status, 200)
+            self.assertFalse(body["configured"])
+            status, body = self.request("/api/nvidia/chat.php", payload)
+        self.assertEqual(status, 424)
+        self.assertIn("error", body)
+
     def test_valid_chat_is_proxied_with_server_model(self):
         captured = {}
         payload = {
