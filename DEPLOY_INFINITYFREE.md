@@ -72,8 +72,9 @@ için NVIDIA NIM anahtarı gerekir:
    **Alternatif:** `htdocs/api/config.php` adıyla koyun — `api/.htaccess`
    doğrudan erişimi engeller.
 3. Dosyadaki `NVIDIA_API_KEY` değerine anahtarınızı yazın.
-4. Kontrol: `https://alanadiniz.com/api/nvidia/status` →
-   `{"configured":true,"model":"z-ai/glm-5.3-flash"}` dönmelidir.
+4. Kontrol: `https://alanadiniz.com/api/nvidia.php?route=diag` →
+   `anahtar_ayarli: true` ve `sonuc` alanında başarı mesajı görünmelidir.
+   Gerçek istekle test için adrese `&live=1` ekleyin.
 
 **Anahtarı asla** `index.html`'e, JavaScript'e veya Git deposuna koymayın.
 (`.gitignore` `api/config.php` ve `nvidia-config.php`'yi zaten hariç tutar.)
@@ -101,14 +102,47 @@ için NVIDIA NIM anahtarı gerekir:
 
 ## Sorun giderme
 
+### 🔍 Önce teşhis sayfasını açın
+
+AI çalışmıyorsa tarayıcıdan şu adresi ziyaret edin:
+
+```text
+https://alanadiniz.com/api/nvidia.php?route=diag
+```
+
+Bu sayfa PHP sürümünü, cURL durumunu, anahtarın bulunup bulunmadığını ve
+sunucudan NVIDIA'ya dışa giden bağlantının kurulup kurulamadığını JSON olarak
+raporlar. Anahtar doğru girildiyse **gerçek bir test isteği** için:
+
+```text
+https://alanadiniz.com/api/nvidia.php?route=diag&live=1
+```
+
+`sonuc` alanı sorunu Türkçe olarak açıklar (anahtar geçersiz, model bulunamadı,
+bağlantı engelli vb.). Teşhis sayfası anahtarınızı asla göstermez.
+
+### Sık karşılaşılan durumlar
+
+- **`.htaccess` yüklenmemiş (en yaygın sorun!):** FTP istemcileri ve bazı dosya
+  yöneticileri `.` ile başlayan dosyaları gizler; `.htaccess` hiç yüklenmemiş
+  olabilir. Uygulama artık `.htaccess` olmadan da çalışır — ön yüz
+  `/api/nvidia/status` 404 verirse otomatik olarak
+  `/api/nvidia.php?route=...` adresine geçer. Yine de `.htaccess`'i yüklemek
+  (HTTPS, MIME türleri ve dosya koruması için) önerilir. FileZilla'da
+  *Sunucu → Gizli dosyaları görüntülemeye zorla* seçeneğini açın.
 - **Sayfa açılıyor ama PDF yüklenmiyor:** `vendor/pdf.min.mjs` ve
-  `vendor/pdf.worker.min.mjs` yüklendiğinden ve `.htaccess`'in kökte olduğundan
-  emin olun (`.mjs` MIME türünü `.htaccess` ayarlar). FTP istemcinizde gizli
-  dosyaları (`.htaccess`) göstermeyi açmayı unutmayın.
-- **`/api/nvidia/status` 404 dönüyor:** Kök `.htaccess` yüklenmemiş veya
-  `api/nvidia.php` eksik. Geçici test: `https://alanadiniz.com/api/nvidia.php?route=status`.
-- **Asistan "anahtar ayarlı değil" diyor:** `nvidia-config.php` yanlış yerde
-  olabilir — `htdocs` ile AYNI seviyede (içinde değil) olmalı; ya da
-  `htdocs/api/config.php` olarak koyun.
-- **Asistan zaman aşımına uğruyor:** Ücretsiz hostingde uzun AI yanıtları
-  kesilebilir; tekrar deneyin veya daha kısa soru sorun.
+  `vendor/pdf.worker.min.mjs` yüklendiğinden emin olun; tarayıcı konsolunda
+  404/MIME hatası olup olmadığına bakın.
+- **`/api/nvidia/status` 404 dönüyor:** `api/nvidia.php` eksik olabilir.
+  Doğrudan test: `https://alanadiniz.com/api/nvidia.php?route=status`.
+- **Asistan "anahtar ayarlı değil" diyor:** Teşhis sayfasındaki
+  `yapilandirma_kaynagi` alanına bakın. `nvidia-config.php` → `htdocs` ile
+  AYNI seviyede (içinde değil) olmalı; alternatif `htdocs/api/config.php`.
+  Dosyanın `<?php return [...];` biçiminde olduğundan ve anahtarın
+  `NVIDIA_API_KEY` alanına tırnak içinde yazıldığından emin olun.
+- **Teşhiste SSL hatası görünüyor:** Proxy, sunucunun CA paketi bozuksa SSL
+  doğrulamasını otomatik atlayarak yeniden dener (`ssl_dogrulama_atlandi: true`
+  olarak raporlanır); ek işlem gerekmez.
+- **Asistan zaman aşımına uğruyor:** GLM gibi muhakemeli modeller yoğun
+  saatlerde yavaş yanıt verebilir; uygulama 95 saniyede isteği iptal edip
+  yeniden dener. Sorun sürerse biraz bekleyip tekrar deneyin.
