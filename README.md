@@ -21,7 +21,7 @@ PDF.js, pdf-lib ve KaTeX dosyaları `vendor/` altında depolanır; derleme adım
 
 1. Bu depodaki **tüm dosyaları** `htdocs/` klasörüne yükleyin (`.htaccess` dahil — FTP istemcinizde gizli dosyaları göstermeyi açın).
 2. InfinityFree panelinden **ücretsiz SSL** kurun.
-3. Yapay zekâ için `api/config.sample.php` dosyasını kopyalayıp anahtarınızı girin (ayrıntı aşağıda).
+3. Yapay zekâ için anahtar dosyanızı yükleyin: elinizde hazır `api/config.php` varsa onu `htdocs/api/` içine koymanız yeterlidir (tarayıcıdan erişilemez, `.htaccess` korur). Yoksa `api/config.sample.php`'yi kopyalayıp anahtarınızı girin.
 4. Kontrol: `https://alanadiniz.com/api/nvidia.php?route=diag&live=1`
 
 Adım adım kurulum, teşhis ve sorun giderme için: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFINITYFREE.md)
