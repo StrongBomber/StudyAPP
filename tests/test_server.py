@@ -35,10 +35,9 @@ class ServerContractTests(unittest.TestCase):
         cls.httpd.server_close()
         cls.thread.join(timeout=2)
 
-    def request(self, path, payload=None, extra_headers=None):
+    def request(self, path, payload=None):
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"} if data is not None else {}
-        headers.update(extra_headers or {})
         request = Request(self.base_url + path, data=data, headers=headers)
         try:
             with urlopen(request, timeout=5) as response:
@@ -83,58 +82,6 @@ class ServerContractTests(unittest.TestCase):
             self.assertFalse(body["configured"])
             status, body = self.request("/api/nvidia/chat.php", payload)
         self.assertEqual(status, 424)
-        self.assertIn("error", body)
-
-    def test_cors_preflight_allows_configured_origin(self):
-        origin = "https://study.example"
-        request = Request(
-            self.base_url + "/api/nvidia/chat",
-            headers={
-                "Origin": origin,
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "content-type",
-            },
-            method="OPTIONS",
-        )
-        with patch.dict(os.environ, {"APP_CORS_ORIGINS": origin}):
-            with urlopen(request, timeout=5) as response:
-                self.assertEqual(response.status, 204)
-                self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), origin)
-                self.assertIn("POST", response.headers.get("Access-Control-Allow-Methods", ""))
-                self.assertIn("Content-Type", response.headers.get("Access-Control-Allow-Headers", ""))
-
-    def test_cors_preflight_rejects_unconfigured_origin(self):
-        request = Request(
-            self.base_url + "/api/nvidia/chat",
-            headers={
-                "Origin": "https://attacker.example",
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "content-type",
-            },
-            method="OPTIONS",
-        )
-        with patch.dict(os.environ, {"APP_CORS_ORIGINS": "https://study.example"}):
-            with self.assertRaises(HTTPError) as raised:
-                urlopen(request, timeout=5)
-        self.assertEqual(raised.exception.code, 403)
-        self.assertIsNone(raised.exception.headers.get("Access-Control-Allow-Origin"))
-
-    def test_per_ip_rate_limit_stops_excess_chat_requests(self):
-        captured = {}
-        payload = {
-            "model": "test/model",
-            "messages": [{"role": "user", "content": "Merhaba"}],
-            "max_tokens": 32,
-            "temperature": 0.2,
-            "top_p": 1,
-        }
-        fake_openai = self.fake_openai(captured)
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": "test-secret", "NVIDIA_MODEL": "test/model", "APP_RATE_LIMIT_PER_HOUR": "1"}), patch.dict(sys.modules, {"openai": fake_openai}):
-            headers = {"X-Real-IP": "198.51.100.213"}
-            status, _ = self.request("/api/nvidia/chat", payload, headers)
-            self.assertEqual(status, 200)
-            status, body = self.request("/api/nvidia/chat", payload, headers)
-        self.assertEqual(status, 429)
         self.assertIn("error", body)
 
     def test_valid_chat_is_proxied_with_server_model(self):

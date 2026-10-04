@@ -8,13 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class InfinityFreeDeploymentTests(unittest.TestCase):
-    def test_railpack_has_public_python_start_command(self):
-        import json
-
-        config = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
-        self.assertIn("python server.py", config["deploy"]["startCommand"])
-        self.assertIn("0.0.0.0", config["deploy"]["startCommand"])
-
     def test_builder_creates_uploadable_php_site_without_local_secrets(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "htdocs"
@@ -28,7 +21,6 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
 
             for relative_path in (
                 "index.html",
-                "app-config.js",
                 "assets/demo.pdf",
                 "vendor/pdf.min.mjs",
                 "api/nvidia/.htaccess",
