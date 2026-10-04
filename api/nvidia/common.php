@@ -321,12 +321,18 @@ function studyapp_test(): void
     curl_close($curl);
     if ($response === false) {
         error_log('StudyAPP NVIDIA connection test failed; cURL error ' . $curlErrorNumber);
-        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisine ulaşılamadı. PHP cURL/SSL ve hosting dış bağlantı ayarlarını kontrol et.']]);
+        studyapp_json(502, ['error' => [
+            'message' => 'Harici bağlantı kurulamadı.',
+            'diagnostic' => ['type' => 'curl', 'code' => $curlErrorNumber],
+        ]]);
     }
 
     $upstream = json_decode($response, true);
     if (!is_array($upstream)) {
-        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisi geçersiz bir yanıt döndürdü.']]);
+        studyapp_json(502, ['error' => [
+            'message' => 'Harici hizmet geçersiz bir yanıt döndürdü.',
+            'diagnostic' => ['type' => 'invalid_response', 'http_status' => $upstreamStatus],
+        ]]);
     }
     if ($upstreamStatus < 200 || $upstreamStatus >= 300) {
         if ($upstreamStatus === 401 || $upstreamStatus === 403) {
@@ -343,7 +349,10 @@ function studyapp_test(): void
         $safeStatus = in_array($upstreamStatus, [400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504], true)
             ? $upstreamStatus
             : 502;
-        studyapp_json($safeStatus, ['error' => ['message' => $message]]);
+        studyapp_json($safeStatus, ['error' => [
+            'message' => $message,
+            'diagnostic' => ['type' => 'upstream_http', 'code' => $upstreamStatus],
+        ]]);
     }
 
     $text = $upstream['choices'][0]['message']['content'] ?? '';
@@ -469,12 +478,18 @@ function studyapp_chat(): void
 
     if ($response === false) {
         error_log('StudyAPP NVIDIA request failed; cURL error ' . $curlErrorNumber);
-        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisine şu anda ulaşılamıyor. Biraz sonra tekrar dene.']]);
+        studyapp_json(502, ['error' => [
+            'message' => 'Harici bağlantı kurulamadı.',
+            'diagnostic' => ['type' => 'curl', 'code' => $curlErrorNumber],
+        ]]);
     }
 
     $upstream = json_decode($response, true);
     if (!is_array($upstream)) {
-        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisi geçersiz bir yanıt döndürdü.']]);
+        studyapp_json(502, ['error' => [
+            'message' => 'Harici hizmet geçersiz bir yanıt döndürdü.',
+            'diagnostic' => ['type' => 'invalid_response', 'http_status' => $upstreamStatus],
+        ]]);
     }
 
     if ($upstreamStatus < 200 || $upstreamStatus >= 300) {
@@ -494,7 +509,10 @@ function studyapp_chat(): void
         $safeStatus = in_array($upstreamStatus, [400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504], true)
             ? $upstreamStatus
             : 502;
-        studyapp_json($safeStatus, ['error' => ['message' => $message]]);
+        studyapp_json($safeStatus, ['error' => [
+            'message' => $message,
+            'diagnostic' => ['type' => 'upstream_http', 'code' => $upstreamStatus],
+        ]]);
     }
 
     $text = $upstream['choices'][0]['message']['content'] ?? '';

@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "index.html").read_text(encoding="utf-8")
 MODULE = re.search(r'<script\s+type="module">(.*?)</script>', HTML, re.S).group(1)
+PHP_API = (ROOT / "api" / "nvidia" / "common.php").read_text(encoding="utf-8")
 STATIC_MARKUP = HTML.split('<script src="./vendor/pdf-lib.min.js">', 1)[0]
 
 
@@ -85,11 +86,22 @@ const key=safeConnectionError('NVIDIA API anahtarı reddedildi.',401);
 const busy=safeConnectionError('NVIDIA modeli şu anda yoğun.',503);
 const storage=safeConnectionError('AI kullanım sınırı denetlenemedi.',503);
 const origin=safeConnectionError('İstek aynı web sitesinden gönderilmelidir.',403);
-for(const message of [key,busy,storage,origin])if(/NVIDIA|glm|model/i.test(message))throw new Error('provider details leaked into UI');
+const tls=safeConnectionError('Harici bağlantı kurulamadı.',502,{type:'curl',code:60});
+const timeout=safeConnectionError('Harici bağlantı kurulamadı.',502,{type:'curl',code:28});
+const upstream=safeConnectionError('Uzak hizmet geçici hata döndürdü.',502,{type:'upstream_http',code:502});
+const invalid=safeConnectionError('Geçersiz yanıt.',502,{type:'invalid_response',http_status:200});
+for(const message of [key,busy,storage,origin,tls,timeout,upstream,invalid])if(/NVIDIA|glm|model/i.test(message))throw new Error('provider details leaked into UI');
 if(!key.includes('anahtar'))throw new Error('key error is not actionable');
 if(!storage.includes('izinlerini'))throw new Error('storage error is not actionable');
 if(!origin.includes('site adresi'))throw new Error('origin error is not actionable');
+if(!tls.includes('cURL 60')||!tls.includes('sertifikası'))throw new Error('TLS diagnostics are missing');
+if(!timeout.includes('cURL 28')||!timeout.includes('zaman aşımı'))throw new Error('timeout diagnostics are missing');
+if(!upstream.includes('HTTP 502'))throw new Error('upstream HTTP diagnostics are missing');
+if(!invalid.includes('HTTP 200'))throw new Error('invalid-response diagnostics are missing');
 """
+        self.assertIn("'diagnostic' => ['type' => 'curl', 'code' => $curlErrorNumber]", PHP_API)
+        self.assertIn("'type' => 'invalid_response'", PHP_API)
+        self.assertIn("'type' => 'upstream_http'", PHP_API)
         result = subprocess.run([node, "-e", helper + exercise], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
