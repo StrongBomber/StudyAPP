@@ -1,0 +1,25 @@
+# Local credentials and environment files
+.env
+.env.*
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local archives and generated build outputs
+*.zip
+build/
+dist/
