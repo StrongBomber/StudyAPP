@@ -13,6 +13,8 @@ PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış
 - Geri al/yinele, yakınlaştırma/taşıma, kırpma odağı ve görünümü sıfırlama
 - Notların, çizimlerin ve soru durumlarının tarayıcıda IndexedDB ile saklanması
 - Kırpım seçmeden de açık PDF sayfasını bağlam olarak kullanabilen Türkçe ders asistanı
+- Kaydırılabilir sohbet geçmişi, boyutlandırılabilir asistan penceresi ve tam ekran sohbet modu
+- Asistan kurulum rehberinde API anahtarının `htdocs/config.php` içindeki `api_key` alanına ekleneceği açıkça belirtilir
 - Örnek çalışma PDF’i: `assets/demo.pdf`
 
 Stylus basıncı ve fiziksel kalem hissi cihazdan cihaza değişir; uygun bir cihazda ayrıca denenmelidir.

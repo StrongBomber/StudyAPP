@@ -39,6 +39,22 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("requestWithRetry('/api/nvidia/chat.php'", MODULE)
         self.assertNotIn("NVIDIA_API_KEY", MODULE)
 
+    def test_chatbot_window_is_scrollable_resizable_and_fullscreen(self):
+        self.assertIn('id="aiScrollArea"', STATIC_MARKUP)
+        self.assertIn('id="aiResizeHandle"', STATIC_MARKUP)
+        self.assertIn('id="aiFullscreenBtn"', STATIC_MARKUP)
+        self.assertIn('id="aiKeyLocation"', STATIC_MARKUP)
+        self.assertIn("function scrollAiToBottom", MODULE)
+        self.assertIn("function startAssistantResize", MODULE)
+        self.assertIn("setPointerCapture", MODULE)
+        self.assertIn("function setAssistantFullscreen", MODULE)
+        self.assertIn("assistant-fullscreen", MODULE)
+        self.assertIn("htdocs/config.php", STATIC_MARKUP)
+        self.assertIn("config.example.php", STATIC_MARKUP)
+        self.assertIn("config.php", STATIC_MARKUP)
+        self.assertIn("'api_key'", STATIC_MARKUP)
+        self.assertIn("API_KEY", STATIC_MARKUP)
+
     def test_ai_setup_uses_a_private_server_config_and_connection_test(self):
         self.assertIn('id="aiSetupModal"', STATIC_MARKUP)
         self.assertIn('id="aiTestConnectionBtn"', STATIC_MARKUP)
