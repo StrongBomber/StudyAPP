@@ -21,6 +21,11 @@ return [
     // &live=1&model=... ile hızlı bir model bulup buraya yazın.
     'NVIDIA_MODEL' => 'z-ai/glm-5.3-flash',
 
+    // İsteğe bağlı: arayüzdeki model seçicide görünecek modeller (virgülle ayırın).
+    // Boş bırakılırsa varsayılan: moonshotai/kimi-k3, z-ai/glm-5.3-flash, z-ai/glm-5.3
+    // Güncel adlar için: https://alanadiniz.com/api/nvidia.php?route=models
+    // 'NVIDIA_MODELS' => 'moonshotai/kimi-k3, z-ai/glm-5.3-flash, z-ai/glm-5.3',
+
     // İsteğe bağlı: birincil model yanıt vermezse sırayla denenecek yedek
     // modeller (virgülle ayırın). Güncel model adlarını şu adresten görün:
     // https://alanadiniz.com/api/nvidia.php?route=models

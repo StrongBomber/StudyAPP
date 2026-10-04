@@ -24,6 +24,8 @@
 declare(strict_types=1);
 
 const DEFAULT_MODEL = 'z-ai/glm-5.3-flash';
+// Arayüzde elle seçilebilen modeller (yapılandırmada NVIDIA_MODELS ile değiştirilebilir).
+const DEFAULT_MODELS = ['moonshotai/kimi-k3', 'z-ai/glm-5.3-flash', 'z-ai/glm-5.3'];
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_URL = NVIDIA_BASE_URL . '/chat/completions';
 const MAX_BODY_BYTES = 20971520; // 20 MB
@@ -118,9 +120,40 @@ function load_config(): array
         }
     }
 
+    // Arayüzde seçilebilir model listesi: NVIDIA_MODELS (virgülle ayrık) veya varsayılan üçlü.
+    $modelsRaw = '';
+    foreach ([$aboveRoot, $local] as $file) {
+        if (is_readable($file)) {
+            $cfg = include $file;
+            if (is_array($cfg) && isset($cfg['NVIDIA_MODELS'])) {
+                $modelsRaw = trim((string) $cfg['NVIDIA_MODELS']);
+                break;
+            }
+        }
+    }
+    if ($modelsRaw === '') {
+        $modelsRaw = trim((string) (getenv('NVIDIA_MODELS') ?: ''));
+    }
+    $modelList = [];
+    foreach (explode(',', $modelsRaw) as $candidate) {
+        $candidate = trim($candidate);
+        if ($candidate !== '' && preg_match('~^[\w.\-/]{1,120}$~', $candidate)) {
+            $modelList[] = $candidate;
+        }
+    }
+    if (!$modelList) {
+        $modelList = DEFAULT_MODELS;
+    }
+    // Birincil model her zaman listede olsun (başta).
+    if (!in_array($model, $modelList, true)) {
+        array_unshift($modelList, $model);
+    }
+    $modelList = array_values(array_unique($modelList));
+
     return [
         'api_key' => $apiKey,
         'model' => $model,
+        'models' => $modelList,
         'timeout' => $timeout,
         'fallback_models' => array_values(array_unique($fallbackList)),
         'thinking' => $thinking,
@@ -340,13 +373,19 @@ function handle_chat(bool $test, array $config): void
         json_out(424, ['error' => ['message' => 'NVIDIA_API_KEY sunucuda ayarlı değil. nvidia-config.php (veya api/config.php) dosyasına anahtarı ekle.']]);
     }
 
+    // Arayüzden elle seçilen model, izinli listede olmalı.
     $configuredModel = $config['model'];
+    $allowedModels = array_values(array_unique(array_merge(
+        [$configuredModel],
+        $config['models'],
+        $config['fallback_models']
+    )));
     $model = (string) ($payload['model'] ?? $configuredModel);
     if ($model === '') {
         $model = $configuredModel;
     }
-    if ($model !== $configuredModel) {
-        json_out(400, ['error' => ['message' => 'İstenen model NVIDIA_MODEL sunucu ayarıyla eşleşmiyor.']]);
+    if (!in_array($model, $allowedModels, true)) {
+        json_out(400, ['error' => ['message' => 'İstenen model izinli model listesinde yok. NVIDIA_MODELS ayarını kontrol et.']]);
     }
 
     $messages = $payload['messages'] ?? null;
@@ -700,7 +739,11 @@ if ($route === 'status') {
     if ($method !== 'GET') {
         json_out(405, ['error' => ['message' => 'Method not allowed.']]);
     }
-    json_out(200, ['configured' => $config['api_key'] !== '', 'model' => $config['model']]);
+    json_out(200, [
+        'configured' => $config['api_key'] !== '',
+        'model' => $config['model'],
+        'models' => $config['models'],
+    ]);
 }
 
 if ($route === 'chat' || $route === 'test') {

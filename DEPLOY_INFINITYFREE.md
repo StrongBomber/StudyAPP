@@ -151,7 +151,16 @@ Canlı test `ZAMAN AŞIMI` veriyorsa süre ölçümlerine bakın:
      hızlandırabilir: `&thinking=0` ekleyerek test edin; işe yararsa
      yapılandırmaya `'NVIDIA_THINKING' => false` yazın.
 
-  4. Çalışan modeli yapılandırmada `NVIDIA_MODEL` yapın ve yoğunluğa karşı
+  4. **Elle model seçimi:** Asistan panelinin başlığındaki açılır menüden
+     model seçebilirsiniz. Menüde görünen modeller `NVIDIA_MODELS` ayarından
+     gelir (varsayılan: `moonshotai/kimi-k3`, `z-ai/glm-5.3-flash`,
+     `z-ai/glm-5.3`); seçiminiz tarayıcıda hatırlanır:
+
+     ```php
+     'NVIDIA_MODELS' => 'moonshotai/kimi-k3, z-ai/glm-5.3-flash, z-ai/glm-5.3',
+     ```
+
+  5. Çalışan modeli yapılandırmada `NVIDIA_MODEL` yapın ve yoğunluğa karşı
      **yedek zincir** tanımlayın — birincil model yanıt vermezse proxy
      otomatik olarak sıradakini dener:
 
