@@ -27,7 +27,8 @@ DirectoryIndex index.html index.php
 </IfModule>
 
 # ---- Gizli / gereksiz dosyaları engelle ---------------------------------------
-<FilesMatch "^(config\.php|config\.sample\.php|server\.py|requirements\.txt|make-demo\.cjs|\.gitignore|\.gitattributes)$">
+# Yapılandırma, belge ve git dosyaları tarayıcıdan erişilemez olmalı.
+<FilesMatch "^(config\.php|config\.sample\.php|nvidia-config\.php|\.gitignore|\.gitattributes|README\.md|DEPLOY_INFINITYFREE\.md|THIRD_PARTY_NOTICES\.md)$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>

@@ -1,46 +1,41 @@
 # InfinityFree'ye Yayınlama Kılavuzu
 
-Bu proje InfinityFree'de çalışacak şekilde hazırlandı. InfinityFree **Python
-çalıştırmaz**; bu yüzden `server.py`'deki NVIDIA proxy'si birebir PHP'ye port
-edildi (`api/nvidia.php`). Ön yüz (`index.html`) hiçbir değişiklik gerektirmez —
-aynı `/api/nvidia/...` yollarını `.htaccess` yönlendirmesi PHP'ye bağlar.
+Bu proje **tamamen InfinityFree'ye göre** yapılandırılmıştır. InfinityFree
+Python/Node çalıştırmaz; bu yüzden yapay zekâ asistanı PHP proxy'si
+(`api/nvidia.php`) üzerinden NVIDIA NIM'e bağlanır. Ön yüz tamamen statiktir.
 
 ```text
-Tarayıcı ──► index.html (statik, PDF + çizim tamamen istemci tarafı)
+Tarayıcı ──► index.html (statik, PDF + çizim + şekil/fotoğraf istemci tarafı)
          ──► /api/nvidia/status|chat|test ──► .htaccess ──► api/nvidia.php ──► NVIDIA NIM
 ```
 
-## 1. Yüklenecek dosyalar
+> `.htaccess` yüklenmemiş olsa bile uygulama çalışır: ön yüz bu durumda
+> otomatik olarak `/api/nvidia.php?route=...` adresine geçer.
 
-`htdocs/` klasörüne şunları yükleyin (FTP veya InfinityFree Dosya Yöneticisi):
+## 1. Dosyaları yükleme
+
+Bu depodaki **tüm dosyaları** olduğu gibi `htdocs/` klasörüne yükleyin
+(FTP veya InfinityFree Dosya Yöneticisi):
 
 ```text
 htdocs/
 ├── index.html
-├── .htaccess
+├── .htaccess                  ← gizli dosya! FTP'de "gizli dosyaları göster" açık olsun
 ├── api/
 │   ├── nvidia.php
 │   ├── .htaccess
 │   └── config.sample.php
 ├── assets/demo.pdf
-└── vendor/            (tamamı: pdf.min.mjs, pdf.worker.min.mjs, pdf-lib.min.js, katex/)
+└── vendor/                    (tamamı: pdf.min.mjs, pdf.worker.min.mjs, pdf-lib.min.js, katex/)
 ```
 
-Hazır paket oluşturmak için (yerelde, Bash):
+> FTP için [FileZilla](https://filezilla-project.org/) önerilir (hesap FTP
+> bilgileri InfinityFree kontrol panelinde yazar). FileZilla'da
+> *Sunucu → Gizli dosyaları görüntülemeye zorla* seçeneğini açın.
+> Dosya Yöneticisi kullanıyorsanız projeyi zip'leyip sunucuda çıkarabilirsiniz.
 
-```bash
-./make-infinityfree-package.sh
-# → dist/infinityfree-upload.zip  — içeriğini htdocs'a çıkarın
-```
-
-> InfinityFree Dosya Yöneticisi zip'i sunucuda çıkarabilir; FTP için
-> [FileZilla](https://filezilla-project.org/) önerilir (hesap FTP bilgileri
-> InfinityFree kontrol panelinde yazar).
-
-Yüklemeyin: `server.py`, `requirements.txt`, `tests/`, `make-demo.cjs`,
-`.github/` — bunlar yalnızca yerel geliştirme/CI içindir. (Yanlışlıkla
-yüklenirlerse `.htaccess` zaten `server.py` ve `requirements.txt` erişimini
-engeller.)
+`README.md` ve bu kılavuz gibi belge dosyaları sunucuya yüklense de `.htaccess`
+bunlara tarayıcı erişimini engeller; isterseniz hiç yüklemeyebilirsiniz.
 
 ## 2. SSL (HTTPS) kurulumu
 
@@ -53,10 +48,10 @@ engeller.)
 > SSL kurulumunu yapana kadar yönlendirme sorun çıkarırsa `.htaccess` içindeki
 > üç satırlık HTTPS bloğunun başına `#` koyarak geçici olarak kapatabilirsiniz.
 
-## 3. Yapay zekâ asistanını etkinleştirme (isteğe bağlı)
+## 3. Yapay zekâ asistanını etkinleştirme
 
-Asistan olmadan da uygulama tamamen çalışır (PDF açma, çizim, kayıt). Asistan
-için NVIDIA NIM anahtarı gerekir:
+Asistan olmadan da uygulama tamamen çalışır (PDF açma, çizim, şekil, fotoğraf,
+kayıt). Asistan için NVIDIA NIM anahtarı gerekir:
 
 1. `api/config.sample.php` dosyasını kopyalayın.
 2. **Önerilen:** Kopyayı `htdocs`'un BİR ÜSTÜNDEKİ klasöre `nvidia-config.php`
@@ -83,22 +78,23 @@ için NVIDIA NIM anahtarı gerekir:
 
 | Konu | Durum |
 | --- | --- |
-| Python | Yok — proxy bu yüzden PHP'ye port edildi. |
+| Python / Node | Yok — AI proxy'si bu yüzden PHP'dir; ön yüz derlemesizdir. |
 | PHP sürümü | 8.x; `curl` ve `json` eklentileri mevcut, proxy bunları kullanır. |
-| Çalışma süresi | PHP betikleri için süre sınırı vardır. Uzun yanıtlar zaman aşımına uğrarsa asistan otomatik yeniden dener; sorun sürerse `nvidia-config.php` ile daha hızlı bir model seçin. |
+| SSL sertifika sorunu | Sunucunun CA paketi bozuksa proxy otomatik olarak doğrulamasız yeniden dener. |
+| Çalışma süresi | Uzun AI yanıtları zaman aşımına uğrarsa asistan otomatik yeniden dener. |
 | İstek boyutu | InfinityFree POST limiti (~10 MB) uygulamanın gönderdiği küçültülmüş sayfa görüntüleri için fazlasıyla yeterlidir. |
-| Güvenlik sistemi | InfinityFree istekleri tarayıcı doğrulamasından (çerez) geçirir. Site içi `fetch` çağrıları sorunsuz çalışır; ancak `curl` gibi harici araçlarla API'yi test etmek bu yüzden başarısız olabilir — testi tarayıcıdan yapın. |
-| Node.js / npm | Gerekmez — `vendor/` altındaki dosyalar derlemesiz kullanılır. |
+| Güvenlik sistemi | InfinityFree istekleri tarayıcı doğrulamasından (çerez) geçirir. Site içi istekler sorunsuz çalışır; `curl` gibi harici araçlarla test bu yüzden başarısız olabilir — testi tarayıcıdan yapın. |
 
 ## 5. Yayın sonrası kontrol listesi
 
 - [ ] `https://alanadiniz.com/` → uygulama açılıyor
 - [ ] "Örnek PDF" açılıyor (`assets/demo.pdf` yüklendi mi?)
 - [ ] PDF üzerine çizim yapılıp sayfa değiştirince korunuyor (IndexedDB)
+- [ ] Şekil aracı ve fotoğraf ekleme çalışıyor
 - [ ] `vendor/` tam yüklendi mi? (Sayfa boşsa eksik `pdf.min.mjs` olabilir —
       tarayıcı konsolunda 404 kontrol edin)
-- [ ] `/api/nvidia/status` doğru JSON dönüyor
-- [ ] Anahtar girildiyse asistan sohbeti yanıt veriyor
+- [ ] `/api/nvidia.php?route=diag&live=1` → `sonuc: BAŞARILI`
+- [ ] Asistan sohbeti yanıt veriyor
 
 ## Sorun giderme
 
@@ -107,29 +103,20 @@ için NVIDIA NIM anahtarı gerekir:
 AI çalışmıyorsa tarayıcıdan şu adresi ziyaret edin:
 
 ```text
-https://alanadiniz.com/api/nvidia.php?route=diag
-```
-
-Bu sayfa PHP sürümünü, cURL durumunu, anahtarın bulunup bulunmadığını ve
-sunucudan NVIDIA'ya dışa giden bağlantının kurulup kurulamadığını JSON olarak
-raporlar. Anahtar doğru girildiyse **gerçek bir test isteği** için:
-
-```text
 https://alanadiniz.com/api/nvidia.php?route=diag&live=1
 ```
 
-`sonuc` alanı sorunu Türkçe olarak açıklar (anahtar geçersiz, model bulunamadı,
-bağlantı engelli vb.). Teşhis sayfası anahtarınızı asla göstermez.
+Bu sayfa PHP sürümünü, cURL durumunu, anahtarın bulunup bulunmadığını,
+sunucudan NVIDIA'ya dışa giden bağlantının kurulup kurulamadığını ve gerçek bir
+test isteğinin sonucunu JSON olarak raporlar. `sonuc` alanı sorunu Türkçe
+açıklar (anahtar geçersiz, model bulunamadı, bağlantı engelli vb.). Teşhis
+sayfası anahtarınızı asla göstermez.
 
 ### Sık karşılaşılan durumlar
 
-- **`.htaccess` yüklenmemiş (en yaygın sorun!):** FTP istemcileri ve bazı dosya
-  yöneticileri `.` ile başlayan dosyaları gizler; `.htaccess` hiç yüklenmemiş
-  olabilir. Uygulama artık `.htaccess` olmadan da çalışır — ön yüz
-  `/api/nvidia/status` 404 verirse otomatik olarak
-  `/api/nvidia.php?route=...` adresine geçer. Yine de `.htaccess`'i yüklemek
-  (HTTPS, MIME türleri ve dosya koruması için) önerilir. FileZilla'da
-  *Sunucu → Gizli dosyaları görüntülemeye zorla* seçeneğini açın.
+- **`.htaccess` yüklenmemiş:** Uygulama yine çalışır (ön yüz otomatik olarak
+  `/api/nvidia.php?route=...` adresine geçer) ama HTTPS yönlendirmesi, MIME
+  türleri ve belge koruması için `.htaccess`'i yüklemeniz önerilir.
 - **Sayfa açılıyor ama PDF yüklenmiyor:** `vendor/pdf.min.mjs` ve
   `vendor/pdf.worker.min.mjs` yüklendiğinden emin olun; tarayıcı konsolunda
   404/MIME hatası olup olmadığına bakın.

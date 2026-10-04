@@ -1,27 +1,16 @@
-# Local credentials and environment files
+# API anahtarı içeren yerel yapılandırma dosyaları — ASLA commit etmeyin
 .env
 .env.*
 api/config.php
 nvidia-config.php
 
-# Python environments and generated files
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Editor and operating-system files
+# Editör ve işletim sistemi dosyaları
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# Local archives and generated build outputs
+# Yerel arşivler ve üretilen çıktılar
 *.zip
 build/
 dist/
