@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -62,25 +63,68 @@ class ServerContractTests(unittest.TestCase):
 
     def test_status_reports_configuration_without_leaking_key(self):
         secret = "test-secret-not-a-real-key"
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": secret, "NVIDIA_MODEL": "test/model"}):
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": secret, "NVIDIA_MODEL": "test/model", "AI_ENABLED": "true"}):
             status, body = self.request("/api/nvidia/status")
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"configured": True, "model": "test/model"})
+        self.assertEqual(body, {"configured": True, "model": "test/model", "reason": "ready"})
         self.assertNotIn(secret, json.dumps(body))
 
-    def test_status_reports_unconfigured_environment(self):
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": ""}):
+    def test_status_can_keep_ai_off_even_when_a_key_exists(self):
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "test-secret", "AI_ENABLED": "false"}):
             status, body = self.request("/api/nvidia/status")
         self.assertEqual(status, 200)
         self.assertFalse(body["configured"])
+        self.assertEqual(body["reason"], "disabled")
+
+    def test_status_reports_unconfigured_environment(self):
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "", "AI_ENABLED": "true"}):
+            status, body = self.request("/api/nvidia/status")
+        self.assertEqual(status, 200)
+        self.assertFalse(body["configured"])
+        self.assertEqual(body["reason"], "missing_key")
+
+    def test_dotenv_parser_handles_comments_quotes_and_export(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dotenv = Path(temporary_directory) / ".env"
+            dotenv.write_text(
+                "\n".join(
+                    [
+                        "# private config",
+                        "AI_ENABLED=true",
+                        'NVIDIA_API_KEY="nvapi-test-value"',
+                        "export NVIDIA_MODEL=z-ai/glm-5.3-flash",
+                        "malformed line",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                app_server.parse_dotenv_file(dotenv),
+                {
+                    "AI_ENABLED": "true",
+                    "NVIDIA_API_KEY": "nvapi-test-value",
+                    "NVIDIA_MODEL": "z-ai/glm-5.3-flash",
+                },
+            )
+
+    def test_local_static_server_never_serves_dotenv_template(self):
+        with self.assertRaises(HTTPError) as response:
+            urlopen(self.base_url + "/.env.example", timeout=5)
+        self.assertEqual(response.exception.code, 404)
 
     def test_php_compatible_api_paths_work_with_local_python_server(self):
         payload = {"messages": [{"role": "user", "content": "Merhaba"}]}
-        with patch.dict(os.environ, {"NVIDIA_API_KEY": ""}):
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "", "AI_ENABLED": "true"}):
             status, body = self.request("/api/nvidia/status.php")
             self.assertEqual(status, 200)
             self.assertFalse(body["configured"])
             status, body = self.request("/api/nvidia/chat.php", payload)
+        self.assertEqual(status, 424)
+        self.assertIn("error", body)
+
+    def test_php_compatible_ai_connection_test_endpoint_exists(self):
+        with patch.dict(os.environ, {"NVIDIA_API_KEY": "", "AI_ENABLED": "true"}):
+            status, body = self.request("/api/nvidia/test.php", {})
         self.assertEqual(status, 424)
         self.assertIn("error", body)
 

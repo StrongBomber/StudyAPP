@@ -1,6 +1,7 @@
 # Local credentials and environment files
 .env
 .env.*
+!.env.example
 
 # Python environments and generated files
 .venv/

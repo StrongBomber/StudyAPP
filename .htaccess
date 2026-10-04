@@ -1,2 +1,7 @@
 # PDF.js is loaded as browser ES modules; ensure InfinityFree serves .mjs with a JavaScript MIME type.
 AddType text/javascript .mjs
+
+# Secrets belong in htdocs/.env, but must never be downloadable over HTTP.
+<FilesMatch "^\.env(?:\..*)?$">
+    Require all denied
+</FilesMatch>

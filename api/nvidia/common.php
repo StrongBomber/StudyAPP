@@ -17,15 +17,98 @@ function studyapp_json(int $status, array $payload): void
     exit;
 }
 
-function studyapp_config(): array
+function studyapp_parse_env_file(string $path): array
 {
-    $path = __DIR__ . '/config.php';
-    if (!is_file($path)) {
+    if (!is_file($path) || !is_readable($path)) {
         return [];
     }
 
-    $config = require $path;
-    return is_array($config) ? $config : [];
+    $lines = @file($path, FILE_IGNORE_NEW_LINES);
+    if (!is_array($lines)) {
+        return [];
+    }
+
+    $values = [];
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') {
+            continue;
+        }
+        if (strncmp($line, 'export ', 7) === 0) {
+            $line = trim(substr($line, 7));
+        }
+        $separator = strpos($line, '=');
+        if ($separator === false) {
+            continue;
+        }
+
+        $name = trim(substr($line, 0, $separator));
+        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $name)) {
+            continue;
+        }
+        $value = trim(substr($line, $separator + 1));
+        if (strlen($value) >= 2) {
+            $quote = $value[0];
+            if (($quote === '\'' || $quote === '"') && substr($value, -1) === $quote) {
+                $value = substr($value, 1, -1);
+                if ($quote === '"') {
+                    $value = stripcslashes($value);
+                }
+            }
+        }
+        $values[$name] = $value;
+    }
+
+    return $values;
+}
+
+function studyapp_environment_value(string $name, array $dotenv): ?string
+{
+    $processValue = getenv($name);
+    if ($processValue !== false && trim((string) $processValue) !== '') {
+        return (string) $processValue;
+    }
+    if (isset($_ENV[$name]) && trim((string) $_ENV[$name]) !== '') {
+        return (string) $_ENV[$name];
+    }
+    if (isset($_SERVER[$name]) && trim((string) $_SERVER[$name]) !== '') {
+        return (string) $_SERVER[$name];
+    }
+    return array_key_exists($name, $dotenv) ? (string) $dotenv[$name] : null;
+}
+
+function studyapp_config(): array
+{
+    $config = [];
+    $path = __DIR__ . '/config.php';
+    if (is_file($path)) {
+        $loaded = require $path;
+        $config = is_array($loaded) ? $loaded : [];
+    }
+
+    $dotenv = studyapp_parse_env_file(dirname(__DIR__, 2) . '/.env');
+    $apiKey = studyapp_environment_value('NVIDIA_API_KEY', $dotenv);
+    $enabled = studyapp_environment_value('AI_ENABLED', $dotenv);
+    $model = studyapp_environment_value('NVIDIA_MODEL', $dotenv);
+    $rateLimit = studyapp_environment_value('AI_RATE_LIMIT_PER_HOUR', $dotenv);
+
+    if ($apiKey !== null) {
+        $config['nvidia_api_key'] = $apiKey;
+    }
+    if ($enabled !== null) {
+        $parsedEnabled = filter_var($enabled, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $config['enabled'] = $parsedEnabled === true;
+    } elseif (!array_key_exists('enabled', $config)) {
+        $config['enabled'] = false;
+    }
+    if ($model !== null && trim($model) !== '') {
+        $config['nvidia_model'] = trim($model);
+    }
+    if ($rateLimit !== null && ctype_digit(trim($rateLimit))) {
+        $config['rate_limit_per_hour'] = (int) trim($rateLimit);
+    }
+
+    return $config;
 }
 
 function studyapp_model(array $config): string
@@ -49,9 +132,14 @@ function studyapp_status(): void
     }
 
     $config = studyapp_config();
+    $enabled = ($config['enabled'] ?? false) === true;
+    $hasKey = trim((string) ($config['nvidia_api_key'] ?? '')) !== '';
+    $hasCurl = function_exists('curl_init');
+    $reason = !$enabled ? 'disabled' : (!$hasKey ? 'missing_key' : (!$hasCurl ? 'missing_curl' : 'ready'));
     studyapp_json(200, [
-        'configured' => studyapp_is_configured($config),
+        'configured' => $reason === 'ready',
         'model' => studyapp_model($config),
+        'reason' => $reason,
     ]);
 }
 
@@ -139,6 +227,108 @@ function studyapp_same_origin_json_request(): bool
         && hash_equals($requestHost, strtolower($originHost));
 }
 
+function studyapp_test(): void
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        header('Allow: POST');
+        studyapp_json(405, ['error' => ['message' => 'Bu uç nokta yalnızca POST kabul eder.']]);
+    }
+    if (!studyapp_same_origin_json_request()) {
+        studyapp_json(403, ['error' => ['message' => 'İstek aynı web sitesinden gönderilmelidir.']]);
+    }
+
+    $rawBody = file_get_contents('php://input');
+    if (!is_string($rawBody) || strlen($rawBody) > 1024 || !is_array(json_decode($rawBody, true))) {
+        studyapp_json(400, ['error' => ['message' => 'Bağlantı testi geçerli bir JSON isteği olmalı.']]);
+    }
+
+    $config = studyapp_config();
+    if (!studyapp_is_configured($config)) {
+        studyapp_json(424, ['error' => ['message' => 'AI hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve NVIDIA_API_KEY ayarlarını kontrol et.']]);
+    }
+
+    $limit = max(1, min(500, (int) ($config['rate_limit_per_hour'] ?? 30)));
+    $rateState = studyapp_rate_limit($limit);
+    if ($rateState === 'limited') {
+        header('Retry-After: 3600');
+        studyapp_json(429, ['error' => ['message' => 'Bu IP için saatlik AI kullanım sınırına ulaşıldı. Daha sonra tekrar dene.']]);
+    }
+    if ($rateState !== 'allowed') {
+        studyapp_json(503, ['error' => ['message' => 'AI kullanım sınırı denetlenemedi. Biraz sonra tekrar dene.']]);
+    }
+
+    $model = studyapp_model($config);
+    $requestBody = json_encode([
+        'model' => $model,
+        'messages' => [
+            ['role' => 'system', 'content' => 'Reply with exactly OK.'],
+            ['role' => 'user', 'content' => 'Connection test. Reply with exactly OK.'],
+        ],
+        'temperature' => 0,
+        'top_p' => 1,
+        'max_tokens' => 12,
+        'stream' => false,
+    ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($requestBody === false) {
+        studyapp_json(500, ['error' => ['message' => 'Bağlantı testi hazırlanamadı.']]);
+    }
+
+    $curl = curl_init(STUDYAPP_NVIDIA_CHAT_URL);
+    if ($curl === false) {
+        studyapp_json(424, ['error' => ['message' => 'Sunucuda PHP cURL etkin değil.']]);
+    }
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $requestBody,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . trim((string) $config['nvidia_api_key']),
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 35,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_USERAGENT => 'StudyAPP/1.0',
+        CURLOPT_FOLLOWLOCATION => false,
+    ]);
+
+    $response = curl_exec($curl);
+    $curlErrorNumber = curl_errno($curl);
+    $upstreamStatus = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    curl_close($curl);
+    if ($response === false) {
+        error_log('StudyAPP NVIDIA connection test failed; cURL error ' . $curlErrorNumber);
+        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisine ulaşılamadı. PHP cURL/SSL ve hosting dış bağlantı ayarlarını kontrol et.']]);
+    }
+
+    $upstream = json_decode($response, true);
+    if (!is_array($upstream)) {
+        studyapp_json(502, ['error' => ['message' => 'NVIDIA servisi geçersiz bir yanıt döndürdü.']]);
+    }
+    if ($upstreamStatus < 200 || $upstreamStatus >= 300) {
+        if ($upstreamStatus === 401 || $upstreamStatus === 403) {
+            $message = 'NVIDIA API anahtarı reddedildi. .env dosyasındaki anahtarı kontrol et.';
+        } elseif ($upstreamStatus === 404) {
+            $message = 'NVIDIA tarafında bu model bulunamadı. NVIDIA_MODEL ayarını kontrol et.';
+        } elseif ($upstreamStatus === 429) {
+            $message = 'NVIDIA API kotası veya hız sınırı aşıldı.';
+        } elseif ($upstreamStatus >= 500) {
+            $message = 'NVIDIA servisi geçici bir hata döndürdü (' . $upstreamStatus . ').';
+        } else {
+            $message = 'NVIDIA bağlantı testi reddedildi (' . $upstreamStatus . ').';
+        }
+        $safeStatus = in_array($upstreamStatus, [400, 401, 403, 404, 408, 409, 413, 422, 429, 500, 502, 503, 504], true)
+            ? $upstreamStatus
+            : 502;
+        studyapp_json($safeStatus, ['error' => ['message' => $message]]);
+    }
+
+    $text = $upstream['choices'][0]['message']['content'] ?? '';
+    studyapp_json(200, ['ok' => true, 'model' => $model, 'text' => is_string($text) ? $text : '']);
+}
+
 function studyapp_chat(): void
 {
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -151,7 +341,7 @@ function studyapp_chat(): void
 
     $config = studyapp_config();
     if (!studyapp_is_configured($config)) {
-        studyapp_json(424, ['error' => ['message' => 'AI sohbeti kapalı. InfinityFree ayarlarında api/nvidia/config.php dosyasını yapılandır.']]);
+        studyapp_json(424, ['error' => ['message' => 'AI sohbeti hazır değil. Sunucudaki .env dosyasında AI_ENABLED=true ve NVIDIA_API_KEY ayarlarını kontrol et.']]);
     }
 
     $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);

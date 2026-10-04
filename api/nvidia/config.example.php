@@ -1,5 +1,5 @@
 <?php
-// Copy this file to config.php on the hosting account, then edit the values.
+// Optional legacy fallback. Prefer the private htdocs/.env file for new setups.
 // Never put a real API key in GitHub or in a browser-side JavaScript file.
 return [
     'enabled' => false,

@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import tempfile
@@ -21,6 +22,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
 
             for relative_path in (
                 ".htaccess",
+                ".env.example",
                 "index.html",
                 "assets/demo.pdf",
                 "vendor/pdf.min.mjs",
@@ -29,10 +31,13 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
                 "api/nvidia/common.php",
                 "api/nvidia/config.example.php",
                 "api/nvidia/status.php",
+                "api/nvidia/test.php",
             ):
                 self.assertTrue((output / relative_path).is_file(), relative_path)
 
             self.assertIn("AddType text/javascript .mjs", (output / ".htaccess").read_text())
+            self.assertIn("<FilesMatch \"^\\.env", (output / ".htaccess").read_text())
+            self.assertFalse((output / ".env").exists())
             self.assertFalse((output / "server.py").exists())
             self.assertFalse((output / "requirements.txt").exists())
             self.assertFalse((output / "api/nvidia/config.php").exists())
@@ -50,7 +55,7 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
         self.assertTrue((ROOT / ".git" / "HEAD").is_file())
 
     def test_server_secret_and_rate_limit_state_are_ignored_by_git(self):
-        for path in ("api/nvidia/config.php", "api/nvidia/.rate-limit.json"):
+        for path in (".env", "api/nvidia/config.php", "api/nvidia/.rate-limit.json"):
             result = subprocess.run(
                 ["git", "check-ignore", "-q", path],
                 cwd=ROOT,
@@ -58,12 +63,55 @@ class InfinityFreeDeploymentTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(result.returncode, 0, f"{path} must be ignored by Git")
+        template = subprocess.run(
+            ["git", "check-ignore", "-q", ".env.example"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(template.returncode, 0, ".env.example must remain distributable")
 
     @unittest.skipUnless(shutil.which("php"), "PHP CLI is not installed")
     def test_php_proxy_files_pass_php_lint(self):
         for path in sorted((ROOT / "api" / "nvidia").glob("*.php")):
             result = subprocess.run(["php", "-l", str(path)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("php"), "PHP CLI is not installed")
+    def test_php_dotenv_parser_reads_key_values_without_shell_execution(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dotenv = Path(temporary_directory) / ".env"
+            dotenv.write_text(
+                "\n".join(
+                    [
+                        "# comment",
+                        "AI_ENABLED=true",
+                        'NVIDIA_API_KEY="nvapi-private-test"',
+                        "export NVIDIA_MODEL=z-ai/glm-5.3-flash",
+                        "INVALID LINE",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            probe = Path(temporary_directory) / "probe.php"
+            probe.write_text(
+                "<?php require $argv[1]; echo json_encode(studyapp_parse_env_file($argv[2]));",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["php", str(probe), str(ROOT / "api" / "nvidia" / "common.php"), str(dotenv)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "AI_ENABLED": "true",
+                    "NVIDIA_API_KEY": "nvapi-private-test",
+                    "NVIDIA_MODEL": "z-ai/glm-5.3-flash",
+                },
+            )
 
 
 if __name__ == "__main__":

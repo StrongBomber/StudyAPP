@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Local static-file server plus a server-side NVIDIA NIM chat proxy.
 
-Keep NVIDIA_API_KEY in the process environment; never place it in the browser
-or commit it to this project.
+Keep NVIDIA_API_KEY in a private .env file or the process environment; never
+place it in the browser or commit it to this project.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = "z-ai/glm-5.3-flash"
@@ -20,9 +20,58 @@ NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 MAX_BODY_BYTES = 20 * 1024 * 1024
 
 
+def parse_dotenv_file(path: Path) -> dict[str, str]:
+    """Parse the small KEY=value subset used by this app without dependencies."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        name, separator, value = line.partition("=")
+        name = name.strip()
+        if not separator or not name.replace("_", "a").isalnum() or name[0].isdigit():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            quote = value[0]
+            value = value[1:-1]
+            if quote == '"':
+                value = value.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+        values[name] = value
+    return values
+
+
+def load_dotenv(path: Path = ROOT / ".env") -> None:
+    """Load local secrets once, without overriding real process environment."""
+    for name, value in parse_dotenv_file(path).items():
+        os.environ.setdefault(name, value)
+
+
+load_dotenv()
+
+
+def ai_is_enabled() -> bool:
+    value = os.environ.get("AI_ENABLED", "true").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
 class AppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def send_head(self):
+        parts = [unquote(part) for part in urlsplit(self.path).path.split("/")]
+        if any(part.startswith(".") and part != ".well-known" for part in parts if part):
+            self.send_error(404, "File not found")
+            return None
+        return super().send_head()
 
     def do_GET(self) -> None:
         route = urlsplit(self.path).path
@@ -30,7 +79,10 @@ class AppHandler(SimpleHTTPRequestHandler):
             route = route[:-4]
         if route == "/api/nvidia/status":
             model = os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-            self._json(200, {"configured": bool(os.environ.get("NVIDIA_API_KEY", "").strip()), "model": model})
+            key_present = bool(os.environ.get("NVIDIA_API_KEY", "").strip())
+            enabled = ai_is_enabled()
+            reason = "disabled" if not enabled else ("ready" if key_present else "missing_key")
+            self._json(200, {"configured": reason == "ready", "model": model, "reason": reason})
             return
         super().do_GET()
 
@@ -80,8 +132,11 @@ class AppHandler(SimpleHTTPRequestHandler):
             return
 
         api_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+        if not ai_is_enabled():
+            self._json(424, {"error": {"message": "AI kapalı. .env dosyasında AI_ENABLED=true ayarla."}})
+            return
         if not api_key:
-            self._json(424, {"error": {"message": "NVIDIA_API_KEY sunucu ortamında ayarlı değil. Yeni anahtarı ortam değişkeni olarak ekleyip Python sunucusunu yeniden başlat."}})
+            self._json(424, {"error": {"message": "NVIDIA_API_KEY bulunamadı. Proje köküne .env dosyası ekle veya sunucu ortam değişkenini tanımla."}})
             return
 
         try:
@@ -169,7 +224,7 @@ def main() -> None:
     args = parser.parse_args()
     server = AppServer((args.host, args.port), AppHandler)
     print(f"PDF study app serving on http://{args.host}:{args.port}")
-    print("NVIDIA proxy is enabled only when NVIDIA_API_KEY is set in this process environment.")
+    print("NVIDIA proxy reads the private .env file or process environment; AI_ENABLED can disable it.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

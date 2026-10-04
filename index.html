@@ -54,6 +54,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16 4 4m-12.3-9.3h6"/></symbol>
   <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/><path d="M9 9h6v6H9z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.4 4.2L19 7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9a7 7 0 0 1 11.7-2L20 12M4 12l2.5 5a7 7 0 0 0 11.7-2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
   <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 5 7 7-7 7"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.4 5.6L19 10l-5.6 1.4L12 17l-1.4-5.6L5 10l5.6-1.4L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></symbol>
@@ -194,19 +196,40 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           <div class="tip-card"><div class="tip-icon"><svg class="icon"><use href="#i-spark"/></svg></div><div class="tip-copy"><strong>İpucu</strong><span>Parmağınla sayfayı kaydır, kalemle çözümünü yaz.</span></div></div>
         </div>
         <div class="ai-content" id="aiContent" hidden>
+          <div class="ai-connection-card" id="aiConnectionCard" data-state="checking" aria-live="polite">
+            <div class="ai-spark"><svg class="icon"><use href="#i-spark"/></svg></div>
+            <div class="ai-connection-copy"><strong id="aiConnectionTitle">Bağlantı denetleniyor</strong><span id="aiConnectionDetail">Sunucu ayarları kontrol ediliyor…</span></div>
+            <span class="ai-status-dot" id="aiConnectionDot" aria-hidden="true"></span>
+          </div>
+          <div class="ai-connection-actions"><button class="ai-config-btn" id="aiSetupOpenBtn" type="button">Kurulum rehberi</button><button class="ai-config-btn ai-refresh-btn" id="aiStatusRefreshBtn" type="button" aria-label="AI bağlantı durumunu yenile" title="Durumu yenile"><svg class="icon"><use href="#i-refresh"/></svg></button><button class="ai-test-btn" id="aiTestConnectionBtn" type="button" disabled>Bağlantıyı test et</button></div>
           <div class="ai-crop-card">
             <div class="ai-crop-head"><div><svg class="icon"><use href="#i-image"/></svg><strong>Görsel bağlamı</strong></div><span id="aiCropPage">Sayfa 01 · Tamamı</span></div>
             <div class="ai-crop-empty" id="aiCropEmpty"><div class="ai-crop-placeholder"><svg class="icon"><use href="#i-image"/></svg></div><div><strong id="aiContextTitle">Sayfanın tamamı kullanılacak</strong><span id="aiContextHint">Kırpım isteğe bağlı; açık sayfa otomatik eklenir.</span></div></div>
             <div class="ai-crop-ready" id="aiCropReady" hidden><div class="ai-crop-preview"><img id="aiCropPreview" alt="İsteğe bağlı seçili soru kırpımı"><button class="crop-clear-btn" id="clearCropBtn" title="Kırpımı kaldır" aria-label="Kırpımı kaldır"><svg class="icon"><use href="#i-close"/></svg></button></div><button class="recrop-btn" id="recropBtn"><svg class="icon"><use href="#i-crop"/></svg> Yeniden kırp</button></div>
           </div>
-          <div class="ai-chat-head"><strong>Çözüm sohbeti</strong><span id="chatTurnCount">Yeni oturum</span></div>
+          <div class="ai-chat-head"><strong>Çözüm sohbeti</strong><div class="ai-chat-head-tools"><span id="chatTurnCount">Yeni oturum</span><button id="newAiChatBtn" type="button" title="Yeni sohbet başlat"><svg class="icon"><use href="#i-plus"/></svg><span>Yeni</span></button></div></div>
           <div class="ai-messages" id="aiMessages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Soru asistanı sohbeti"><div class="ai-welcome"><div class="ai-avatar"><svg class="icon"><use href="#i-spark"/></svg></div><div><strong>Takıldığın yerde yanındayım.</strong><p>Sayfayı kırpmadan da sorabilirsin. İstersen yalnız metin yaz, istersen bir bölümü kırp.</p></div></div></div>
           <div class="ai-suggestions" id="aiSuggestions"><button data-prompt="Bana cevabı söylemeden önce küçük bir ipucu ver.">İpucu ver</button><button data-prompt="Bu soruyu Türkçe, adım adım çöz ve sonucu en sonda söyle.">Adım adım çöz</button></div>
           <div class="ai-composer"><textarea id="aiInput" rows="2" maxlength="8000" placeholder="Soruda nereye takıldın?" aria-label="Asistana sorunu yaz"></textarea><div class="ai-composer-foot"><span id="aiHint">Metinle veya açık sayfayla sorabilirsin.</span><button class="ai-send-btn" id="sendAiBtn" disabled><svg class="icon"><use href="#i-send"/></svg><span>Gönder</span></button></div></div>
+          <div class="ai-disclosure"><svg class="icon"><use href="#i-eye"/></svg><span>PDF ve notların cihazında kalır; gönderdiğin soru ve görsel bağlam NVIDIA’ya iletilir.</span></div>
         </div>
       </aside>
     </div>
   </main>
+</div>
+<div class="modal-backdrop" id="aiSetupModal" aria-hidden="true">
+  <section class="api-dialog ai-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="aiSetupTitle" aria-describedby="aiSetupIntro">
+    <div class="api-dialog-head"><div class="api-dialog-mark"><svg class="icon"><use href="#i-key"/></svg></div><button class="head-icon" id="closeAiSetupBtn" type="button" aria-label="Kurulum rehberini kapat"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <h2 id="aiSetupTitle">AI asistanını güvenle bağla</h2>
+    <p class="api-dialog-intro" id="aiSetupIntro">Anahtar bu sayfaya girilmez. Sunucudaki <code>.env</code> dosyasına eklenir; uygulama anahtarı tarayıcıya göstermeden NVIDIA’ya iletir.</p>
+    <ol class="ai-setup-steps"><li><strong>Şablonu sunucuya kopyala.</strong> InfinityFree’de <code>htdocs/.env.example</code> dosyasını <code>htdocs/.env</code> adıyla kopyala (yoksa yeni dosya oluştur).</li><li><strong>Yalnızca sunucu dosyasını düzenle.</strong> <code>NVIDIA_API_KEY=</code> satırına kendi NVIDIA NIM anahtarını ekle ve <code>AI_ENABLED=true</code> bırak.</li><li><strong>Kaydet, sonra yenile.</strong> Burada “Durumu yenile”ye basıp “Bağlantıyı test et” ile kontrol et.</li></ol>
+    <div class="env-snippet-wrap"><div class="env-snippet-head"><strong>.env örneği</strong><button id="copyAiEnvSnippet" type="button"><svg class="icon"><use href="#i-copy"/></svg><span>Şablonu kopyala</span></button></div><pre class="env-snippet"><code id="aiEnvSnippet">AI_ENABLED=true
+NVIDIA_API_KEY=
+NVIDIA_MODEL=z-ai/glm-5.3-flash
+AI_RATE_LIMIT_PER_HOUR=30</code></pre></div>
+    <div class="api-privacy"><svg class="icon"><use href="#i-eye"/></svg><span>Güvenlik: Bu sayfada API anahtarı alanı yoktur. Gerçek anahtarı HTML’e, sohbet mesajına veya GitHub’a koyma. Kök <code>.htaccess</code> dosyası <code>.env</code> dosyasının HTTP ile indirilmesini engeller.</span></div>
+    <div class="api-dialog-actions"><span class="ai-setup-feedback" id="aiSetupFeedback" role="status" aria-live="polite"></span><button class="header-btn primary" id="verifyAiSetupBtn" type="button"><svg class="icon"><use href="#i-refresh"/></svg> Kaydettim — test et</button></div>
+  </section>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"><svg class="icon"><use href="#i-check"/></svg><span id="toastText">Tamamlandı</span><a class="toast-action" id="toastAction" aria-label="PDF’yi indir" hidden>İndir</a><a class="toast-action toast-open" id="toastOpen" aria-label="PDF’yi yeni sekmede aç" target="_blank" rel="noopener noreferrer" hidden>Aç PDF</a><button class="toast-action toast-share" id="toastShare" type="button" hidden>Paylaş</button></div>
 
@@ -241,7 +264,7 @@ let zoomFactor = 1; let renderTask = null; let renderVersion = 0; let saveTimer 
 let activePointer = null, currentStroke = null, dragOrigin = null, lastPenAt = 0, currentStrokeRect = null, strokeStabilizerFilter = null;
 let touchPointers=new Map(), touchGesture=null;
 let cropStart = null, cropSelection = null, selectedCropData = null, selectedCropPage = null, lastNonCropTool = 'pen', isCropFocus = false;
-let nvidiaModel='z-ai/glm-5.3-flash', nvidiaConnected=false, nvidiaStatusAttempt=0, nvidiaStatusPending=false, aiHistory=[], aiTurnCount=0, isAiSending=false, aiRequestGeneration=0, aiRequestController=null, inspectorMode='study';
+let nvidiaModel='z-ai/glm-5.3-flash', nvidiaConnected=false, nvidiaStatusAttempt=0, nvidiaStatusPending=false, nvidiaStatusState='checking', nvidiaStatusDetail='Sunucu ayarları kontrol ediliyor…', nvidiaTestPending=false, setupFocusReturn=null, aiHistory=[], aiTurnCount=0, isAiSending=false, aiRequestGeneration=0, aiRequestController=null, inspectorMode='study';
 let dpr = Math.min(window.devicePixelRatio || 1, 2), inkDpr = Math.min(window.devicePixelRatio || 1, 3);
 
 function openDB(){
@@ -278,9 +301,74 @@ function closeInspector(){if(assistantIsOpen()){closeAssistant();return;}if(wind
 function updateCropOverlay(){if(!cropSelection){el.cropBox.style.display='none';return;}const w=el.inkCanvas.clientWidth,h=el.inkCanvas.clientHeight;el.cropBox.style.display='block';el.cropBox.style.left=(cropSelection.x*w)+'px';el.cropBox.style.top=(cropSelection.y*h)+'px';el.cropBox.style.width=(cropSelection.w*w)+'px';el.cropBox.style.height=(cropSelection.h*h)+'px';}
 function updateCropFocusMask(){const active=!!pdfDoc&&isCropFocus&&!!cropSelection&&currentTool!=='crop';el.cropFocusMask.hidden=!active;el.stage.classList.toggle('crop-only',active);if(!active)return;const w=el.paper.clientWidth,h=el.paper.clientHeight,x=Math.max(0,Math.min(w,cropSelection.x*w)),y=Math.max(0,Math.min(h,cropSelection.y*h)),right=Math.max(0,w-(cropSelection.x+cropSelection.w)*w),bottom=Math.max(0,h-(cropSelection.y+cropSelection.h)*h),cropW=Math.max(0,cropSelection.w*w),cropH=Math.max(0,cropSelection.h*h);const pieces=Object.fromEntries([...el.cropFocusMask.querySelectorAll('[data-mask]')].map(piece=>[piece.dataset.mask,piece]));Object.assign(pieces.top.style,{left:'0px',top:'0px',width:w+'px',height:y+'px'});Object.assign(pieces.bottom.style,{left:'0px',top:(y+cropH)+'px',width:w+'px',height:bottom+'px'});Object.assign(pieces.left.style,{left:'0px',top:y+'px',width:x+'px',height:cropH+'px'});Object.assign(pieces.right.style,{left:(x+cropW)+'px',top:y+'px',width:right+'px',height:cropH+'px'});}
 function moveCrop(event){if(!cropStart)return;const p=normalizedPoint(event);cropSelection={x:Math.min(cropStart.x,p.x),y:Math.min(cropStart.y,p.y),w:Math.abs(cropStart.x-p.x),h:Math.abs(cropStart.y-p.y)};updateCropOverlay();}
-function aiProviderReady(){return nvidiaConnected;}
-async function syncNvidiaStatus(){if(nvidiaStatusPending)return;nvidiaStatusPending=true;try{const response=await fetch('/api/nvidia/status.php',{cache:'no-store'});if(!response.ok)throw new Error('status unavailable');const status=await response.json();if(typeof status.model==='string'&&status.model)nvidiaModel=status.model;nvidiaConnected=!!status.configured;nvidiaStatusAttempt=0;updateAiUi();}catch(_){updateAiUi();if(nvidiaStatusAttempt<3){const delay=500*(2**nvidiaStatusAttempt++);setTimeout(()=>void syncNvidiaStatus(),delay);}}finally{nvidiaStatusPending=false;}}
-function updateAiUi(){const hasText=!!el.aiInput.value.trim(),turns=aiTurnCount,pageReady=!!pdfDoc&&el.wait.style.display==='none';el.sendAiBtn.disabled=!hasText||isAiSending||!aiProviderReady()||!!pdfDoc&&!selectedCropData&&!pageReady;el.aiHint.textContent=isAiSending?'Yanıt hazırlanıyor…':!aiProviderReady()?'Şu an yanıt veremiyorum.':pdfDoc&&!selectedCropData&&!pageReady?'Sayfa hazırlanıyor…':selectedCropData?'Seçilen kırpım görsel bağlam olarak kullanılacak.':pdfDoc?'Açık sayfanın tamamı otomatik eklenecek.':'Metinle soru sorabilirsin.';$('#chatTurnCount').textContent=turns?`${turns} mesaj`:'Yeni oturum';$('#aiSuggestions').hidden=turns>0;}
+function aiProviderReady(){return nvidiaConnected&&['configured','connected'].includes(nvidiaStatusState);}
+function updateAiConnectionCard(){
+  const card=$('#aiConnectionCard');if(!card)return;
+  const state=nvidiaTestPending?'testing':nvidiaStatusState;
+  const labels={checking:'Bağlantı denetleniyor',testing:'Bağlantı sınanıyor',configured:'Anahtar yapılandırıldı',connected:'AI bağlantısı başarılı',missing_key:'API anahtarı bekleniyor',disabled:'AI kapalı',missing_curl:'PHP cURL gerekli',offline:'Sunucuya ulaşılamıyor',test_error:'Bağlantı testi başarısız'};
+  card.dataset.state=state;
+  $('#aiConnectionTitle').textContent=labels[state]||'AI bağlantı durumu';
+  $('#aiConnectionDetail').textContent=nvidiaTestPending?'NVIDIA servisine kısa bir test isteği gönderiliyor…':nvidiaStatusDetail;
+  const testButton=$('#aiTestConnectionBtn');
+  testButton.disabled=!nvidiaConnected||nvidiaStatusPending||nvidiaTestPending;
+  testButton.textContent=nvidiaTestPending?'Test ediliyor…':'Bağlantıyı test et';
+  const refresh=$('#aiStatusRefreshBtn');
+  refresh.disabled=nvidiaStatusPending||nvidiaTestPending;
+  refresh.classList.toggle('is-loading',nvidiaStatusPending);
+  const verify=$('#verifyAiSetupBtn');if(verify)verify.disabled=nvidiaStatusPending||nvidiaTestPending;
+}
+function connectionDetailForReason(reason){
+  if(reason==='disabled')return 'Sunucuda AI_ENABLED=true yap; .env.example şablonunu kullan.';
+  if(reason==='missing_curl')return 'Hosting hesabında PHP cURL eklentisi etkin olmalı.';
+  if(reason==='missing_key')return 'Sunucudaki .env dosyasına NVIDIA NIM anahtarı eklenmemiş.';
+  return 'Bağlantı testi ve kurulum adımları için aşağıdaki rehberi aç.';
+}
+async function syncNvidiaStatus(){
+  if(nvidiaStatusPending)return nvidiaConnected;
+  nvidiaStatusPending=true;nvidiaStatusState='checking';nvidiaStatusDetail='Sunucu ayarları kontrol ediliyor…';updateAiUi();
+  try{
+    const response=await fetch('/api/nvidia/status.php',{cache:'no-store'});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const status=await response.json();
+    if(typeof status.model==='string'&&status.model)nvidiaModel=status.model;
+    nvidiaConnected=!!status.configured;
+    nvidiaStatusState=nvidiaConnected?'configured':(status.reason||'missing_key');
+    nvidiaStatusDetail=nvidiaConnected?`Model ayarı algılandı · ${nvidiaModel}`:connectionDetailForReason(nvidiaStatusState);
+    nvidiaStatusAttempt=0;
+    return nvidiaConnected;
+  }catch(_){
+    nvidiaConnected=false;nvidiaStatusState='offline';nvidiaStatusDetail='status.php yanıt vermedi. PHP uç noktasını ve dosya yüklemesini kontrol et.';
+    if(nvidiaStatusAttempt<3){const delay=500*(2**nvidiaStatusAttempt++);setTimeout(()=>void syncNvidiaStatus(),delay);}
+    return false;
+  }finally{nvidiaStatusPending=false;updateAiUi();}
+}
+async function testNvidiaConnection(){
+  if(nvidiaTestPending)return;
+  if(!nvidiaConnected){const ready=await syncNvidiaStatus();if(!ready){openAiSetupModal();return;}}
+  nvidiaTestPending=true;nvidiaStatusState='testing';nvidiaStatusDetail='NVIDIA servisine test isteği gönderiliyor…';$('#aiSetupFeedback').textContent='';updateAiUi();
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),40000);
+  try{
+    const response=await fetch('/api/nvidia/test.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:nvidiaModel,messages:[{role:'system',content:'Reply with exactly OK.'},{role:'user',content:'Connection test. Reply with exactly OK.'}],temperature:0,top_p:1,max_tokens:12}),signal:controller.signal});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data?.error?.message||`Bağlantı testi başarısız (${response.status}).`);
+    if(typeof data.model==='string'&&data.model)nvidiaModel=data.model;
+    nvidiaStatusState='connected';nvidiaStatusDetail=`Test başarılı · ${nvidiaModel}`;nvidiaConnected=true;
+    $('#aiSetupFeedback').textContent='Anahtar ve model çalışıyor. AI sohbeti hazır.';toast('AI bağlantısı çalışıyor.');
+  }catch(error){
+    nvidiaStatusState='test_error';nvidiaStatusDetail=error?.name==='AbortError'?'Test zaman aşımına uğradı. Hosting cURL/SSL ve NVIDIA erişimini kontrol et.':(error?.message||'Bağlantı testi başarısız.');
+    $('#aiSetupFeedback').textContent=`Test başarısız: ${nvidiaStatusDetail}`;
+  }finally{clearTimeout(timeout);nvidiaTestPending=false;updateAiUi();}
+}
+function openAiSetupModal(){const modal=$('#aiSetupModal');if(modal.classList.contains('open'))return;setupFocusReturn=document.activeElement;modal.classList.add('open');modal.setAttribute('aria-hidden','false');requestAnimationFrame(()=>$('#closeAiSetupBtn').focus());}
+function closeAiSetupModal(){const modal=$('#aiSetupModal');modal.classList.remove('open');modal.setAttribute('aria-hidden','true');if(setupFocusReturn instanceof HTMLElement)setupFocusReturn.focus();setupFocusReturn=null;}
+async function copyAiEnvExample(){const text=$('#aiEnvSnippet').textContent.trim();let copied=false;try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);copied=true;}}catch(_){}if(!copied){const field=document.createElement('textarea');field.value=text;field.setAttribute('aria-hidden','true');field.style.cssText='position:fixed;opacity:0;left:-10000px;top:0';document.body.appendChild(field);field.select();try{copied=document.execCommand('copy');}catch(_){}field.remove();}$('#aiSetupFeedback').textContent=copied?'Şablon kopyalandı. Gerçek anahtarını yalnızca sunucudaki .env dosyasına yaz.':'Kopyalama başarısız. Şablonu seçip elle kopyalayabilirsin.';}
+function updateAiUi(){
+  const hasText=!!el.aiInput.value.trim(),turns=aiTurnCount,pageReady=!!pdfDoc&&el.wait.style.display==='none';
+  el.sendAiBtn.disabled=!hasText||isAiSending||!aiProviderReady()||!!pdfDoc&&!selectedCropData&&!pageReady;
+  const connectionHint=nvidiaStatusState==='missing_key'?'API anahtarını sunucuya ekle: .env dosyası için kurulum rehberini aç.':nvidiaStatusState==='disabled'?'Sunucuda AI_ENABLED=true yapıp durumu yenile.':nvidiaStatusState==='missing_curl'?'Hosting hesabında PHP cURL etkin olmalı.':nvidiaStatusState==='offline'?'Sunucu bağlantısı yok; PHP durum uç noktasını kontrol et.':'AI bağlantısı hazır değil.';
+  el.aiHint.textContent=isAiSending?'Yanıt hazırlanıyor…':!aiProviderReady()?connectionHint:pdfDoc&&!selectedCropData&&!pageReady?'Sayfa hazırlanıyor…':selectedCropData?'Seçilen kırpım görsel bağlam olarak kullanılacak.':pdfDoc?'Açık sayfanın tamamı otomatik eklenecek.':'Metinle soru sorabilirsin.';
+  $('#chatTurnCount').textContent=turns?`${turns} mesaj`:'Yeni oturum';$('#aiSuggestions').hidden=turns>0;updateAiConnectionCard();
+}
 function updateAiCropPreview(){const hasCrop=!!selectedCropData;el.aiCropEmpty.hidden=hasCrop;el.aiCropReady.hidden=!hasCrop;if(hasCrop){el.aiCropPreview.src=selectedCropData;el.aiCropPage.textContent=`Sayfa ${String(selectedCropPage).padStart(2,'0')} · Kırpım`;}else{el.aiCropPreview.removeAttribute('src');el.aiCropPage.textContent=pdfDoc?`Sayfa ${String(currentPage).padStart(2,'0')} · Tamamı`:'Metin';$('#aiContextTitle').textContent=pdfDoc?'Sayfanın tamamı kullanılacak':'Metinle yardım';$('#aiContextHint').textContent=pdfDoc?'Kırpım isteğe bağlı; açık sayfa soruya otomatik eklenir.':'İstersen PDF olmadan da metinle soru sorabilirsin.';}updateAiUi();}
 function resetAiConversation(){aiRequestGeneration++;aiRequestController?.abort();aiRequestController=null;aiHistory=[];aiTurnCount=0;isAiSending=false;el.sendAiBtn.innerHTML='<svg class="icon"><use href="#i-send"/></svg><span>Gönder</span>';el.aiInput.value='';el.aiMessages.innerHTML='<div class="ai-welcome"><div class="ai-avatar"><svg class="icon"><use href="#i-spark"/></svg></div><div><strong>Takıldığın yerde yanındayım.</strong><p>Sayfayı kırpmadan da sorabilir, istersen yalnızca metin yazabilirsin.</p></div></div>';updateAiUi();}
 const MAX_AI_HISTORY_MESSAGES=36;
@@ -535,6 +623,7 @@ async function sendAiMessage(){
 
 // Toolbar and controls
 $('#assistantOpenBtn').addEventListener('click',()=>{if(assistantIsOpen())closeAssistant();else openAssistant();});
+$('#aiSetupOpenBtn').addEventListener('click',openAiSetupModal);$('#closeAiSetupBtn').addEventListener('click',closeAiSetupModal);$('#aiSetupModal').addEventListener('pointerdown',event=>{if(event.target===$('#aiSetupModal'))closeAiSetupModal();});$('#copyAiEnvSnippet').addEventListener('click',copyAiEnvExample);$('#aiStatusRefreshBtn').addEventListener('click',()=>void syncNvidiaStatus());$('#verifyAiSetupBtn').addEventListener('click',async()=>{const ready=await syncNvidiaStatus();if(ready)await testNvidiaConnection();else $('#aiSetupFeedback').textContent=nvidiaStatusDetail;});$('#aiTestConnectionBtn').addEventListener('click',()=>void testNvidiaConnection());$('#newAiChatBtn').addEventListener('click',()=>{resetAiConversation();el.aiInput.focus();toast('Yeni sohbet hazır.');});
 $('#aiInput').addEventListener('input',updateAiUi);$('#aiInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendAiMessage();}});$('#sendAiBtn').addEventListener('click',sendAiMessage);
 $('#aiSuggestions').addEventListener('click',event=>{const button=event.target.closest('[data-prompt]');if(!button)return;el.aiInput.value=button.dataset.prompt;updateAiUi();sendAiMessage();});
 $('#recropBtn').addEventListener('click',()=>{setTool('crop');if(assistantIsOpen())closeAssistant();toast('Sorunun tamamını çerçevele.');});$('#clearCropBtn').addEventListener('click',resetCropAndView);
@@ -547,7 +636,7 @@ $('#importBtn').addEventListener('click',()=>$('#fileInput').click());$('#sideba
 $('#currentFileRow').addEventListener('click',()=>{if(documentId==='demo')openDemo();else toast('Açık belge zaten seçili.');});
 $('#pageNote').addEventListener('input',()=>{workState.notes[currentPage]=el.note.value;$('#noteSaveHint').textContent='Kaydediliyor…';markSaving();});
 el.taskList.addEventListener('click',event=>{const row=event.target.closest('.task-row');if(!row)return;const id=row.dataset.task;if(event.target.closest('.task-state')){workState.tasks[id]=!workState.tasks[id];if(workState.tasks[id])toast('Tamamlandı olarak işaretlendi.');updateProgress();markSaving();return;}activeTaskId=id;const page=Number(row.dataset.page);changePage(page);updateProgress();});
-$('#toggleInspector').addEventListener('click',()=>{if(assistantIsOpen()){closeAssistant();return;}if(el.inspector.classList.contains('open')){el.inspector.classList.remove('open');updateChatbotFab();}else{el.workGrid.classList.remove('assistant-cloud-open');el.inspector.classList.add('open');setInspectorMode('study');}});$('#panelClose').addEventListener('click',closeInspector);$('#chatbotFab').addEventListener('click',()=>{if(assistantIsOpen())closeAssistant();else openAssistant();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&assistantIsOpen())closeAssistant();});
+$('#toggleInspector').addEventListener('click',()=>{if(assistantIsOpen()){closeAssistant();return;}if(el.inspector.classList.contains('open')){el.inspector.classList.remove('open');updateChatbotFab();}else{el.workGrid.classList.remove('assistant-cloud-open');el.inspector.classList.add('open');setInspectorMode('study');}});$('#panelClose').addEventListener('click',closeInspector);$('#chatbotFab').addEventListener('click',()=>{if(assistantIsOpen())closeAssistant();else openAssistant();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('#aiSetupModal').classList.contains('open')){closeAiSetupModal();return;}if(event.key==='Escape'&&assistantIsOpen())closeAssistant();if(event.key==='Tab'&&$('#aiSetupModal').classList.contains('open')){const nodes=[...$('#aiSetupModal').querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[tabindex]:not([tabindex="-1"])')].filter(node=>!node.hidden);if(!nodes.length)return;const first=nodes[0],last=nodes[nodes.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('#sizePopover').hidden){setSizePopover(false);return;}const inField=event.target instanceof Element&&!!event.target.closest('input,textarea,select');if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'&&!inField){event.preventDefault();event.shiftKey?redo():undo();}else if(event.key==='ArrowLeft'&&!inField)changePage(currentPage-1);else if(event.key==='ArrowRight'&&!inField)changePage(currentPage+1);});window.addEventListener('resize',()=>{updateChatbotFab();if(!$('#sizePopover').hidden)setSizePopover(false);});
 let observedScrollWidth=0,observedScrollHeight=0;const resizeObserver=new ResizeObserver(()=>{const rect=el.pageScroll.getBoundingClientRect();if(Math.abs(rect.width-observedScrollWidth)<.5&&Math.abs(rect.height-observedScrollHeight)<.5)return;observedScrollWidth=rect.width;observedScrollHeight=rect.height;if(pdfDoc)renderCurrentPage().then(()=>{if(isCropFocus&&cropSelection)afterPaperResize(()=>alignFocusedCrop(cropSelection));});});resizeObserver.observe(el.pageScroll);
 $('#mainArea').addEventListener('dragover',event=>{event.preventDefault();el.drop.classList.add('show');});$('#mainArea').addEventListener('dragleave',event=>{if(!$('#mainArea').contains(event.relatedTarget))el.drop.classList.remove('show');});$('#mainArea').addEventListener('drop',event=>{event.preventDefault();el.drop.classList.remove('show');const file=[...event.dataTransfer.files].find(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));if(file)loadFromFile(file);else toast('Buraya bir PDF bırakabilirsin.');});
@@ -750,6 +839,48 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 /* Prevent distracting long-press text selection and the blue iOS/Android tap flash across the app. */
 html,body,body *{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+
+/* Clear, server-side AI onboarding and connection diagnostics. */
+.ai-connection-card{padding:9px 10px;gap:9px;transition:border-color .18s,background .18s}
+.ai-connection-card[data-state="configured"],.ai-connection-card[data-state="connected"]{border-color:#dcefe4;background:#fbfffc}
+.ai-connection-card[data-state="configured"] .ai-spark,.ai-connection-card[data-state="connected"] .ai-spark{background:#eaf7ef;color:#338b66}
+.ai-connection-card[data-state="missing_key"],.ai-connection-card[data-state="disabled"]{border-color:#efe5c7;background:#fffdf7}
+.ai-connection-card[data-state="offline"],.ai-connection-card[data-state="test_error"],.ai-connection-card[data-state="missing_curl"]{border-color:#f1dfd8;background:#fffaf8}
+.ai-status-dot{background:#d8a23d;box-shadow:0 0 0 3px #fbf3dd}
+.ai-connection-card[data-state="configured"] .ai-status-dot,.ai-connection-card[data-state="connected"] .ai-status-dot{background:#46a078;box-shadow:0 0 0 3px #e4f4eb}
+.ai-connection-card[data-state="offline"] .ai-status-dot,.ai-connection-card[data-state="test_error"] .ai-status-dot,.ai-connection-card[data-state="missing_curl"] .ai-status-dot{background:#cb6e5c;box-shadow:0 0 0 3px #f9e9e5}
+.ai-connection-actions{display:flex;align-items:center;gap:5px;margin:4px 1px 1px;flex:none}
+.ai-connection-actions .ai-config-btn{padding:5px 4px}
+.ai-refresh-btn{width:27px;height:25px;display:grid;place-items:center;border:1px solid #e7e8ef;border-radius:7px;color:#7d8291}
+.ai-refresh-btn .icon{width:13px;height:13px}
+.ai-refresh-btn:disabled{opacity:.5;cursor:default}
+.ai-refresh-btn.is-loading .icon{animation:spin .85s linear infinite}
+.ai-test-btn{height:28px;margin-left:auto;padding:0 9px;border:1px solid #dfe1fa;border-radius:8px;background:#f1f2ff;color:#515bd0;font-size:8px;font-weight:750;white-space:nowrap;cursor:pointer;transition:.15s}
+.ai-test-btn:hover:not(:disabled){background:#e7e9ff;border-color:#cfd3fa}
+.ai-test-btn:disabled{opacity:.43;cursor:default}
+.ai-chat-head-tools{display:flex;align-items:center;gap:7px}
+#newAiChatBtn{height:23px;display:flex;align-items:center;gap:3px;padding:0 6px;border:1px solid #e7e8ef;border-radius:7px;background:#fff;color:#737989;font-size:8px;font-weight:700;cursor:pointer}
+#newAiChatBtn:hover{border-color:#d8daf7;background:#f6f6ff;color:#535dd8}
+#newAiChatBtn .icon{width:11px;height:11px}
+.ai-setup-dialog{width:min(100%,500px);max-height:calc(100dvh - 34px);overflow:auto;padding:21px 22px 18px}
+.ai-setup-dialog h2{margin-top:13px}
+.ai-setup-dialog .api-dialog-intro{margin-bottom:13px}
+.ai-setup-dialog code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.94em;color:#4b55b8}
+.ai-setup-steps{display:grid;gap:8px;margin:0 0 13px;padding:0 0 0 21px;color:#7f8492;font-size:10px;line-height:1.55}
+.ai-setup-steps li{padding-left:2px}
+.ai-setup-steps strong{color:#4f5564}
+.env-snippet-wrap{overflow:hidden;border:1px solid #e5e6ef;border-radius:10px;background:#f8f9fc}
+.env-snippet-head{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 9px;border-bottom:1px solid #e8e9f0}
+.env-snippet-head strong{font-size:9px;color:#5b6170}
+.env-snippet-head button{height:24px;display:flex;align-items:center;gap:4px;padding:0 6px;border:1px solid #e3e4ed;border-radius:6px;background:#fff;color:#626a7a;font-size:8px;font-weight:650;cursor:pointer}
+.env-snippet-head button:hover{border-color:#cfd2f2;color:#535dd8}
+.env-snippet-head .icon{width:12px;height:12px}
+.env-snippet{max-height:108px;overflow:auto;margin:0;padding:9px 11px;color:#535b6b;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
+.env-snippet code{color:inherit;user-select:text;-webkit-user-select:text}
+.ai-setup-dialog .api-privacy{margin-top:11px;font-size:9px}
+.ai-setup-dialog .api-dialog-actions{margin-top:12px}
+.ai-setup-feedback{min-width:0;flex:1;color:#6d7482;font-size:9px;line-height:1.4}
+@media(max-width:470px){.ai-setup-dialog{padding:17px 15px 14px}.ai-setup-steps{font-size:9px}.env-snippet{font-size:9px}.ai-connection-copy span{max-width:175px}}
 </style>
 </body>
 </html>

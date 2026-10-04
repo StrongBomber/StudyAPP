@@ -37,16 +37,15 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Yapay zekâ özelliğini kullanacaksanız anahtarı terminalde gizli olarak girin ve aynı oturumdan sunucuyu başlatın:
+Yapay zekâ için gizli `.env` dosyasını örnekten oluşturun ve yalnızca bu yerel dosyayı düzenleyin:
 
 ```bash
-read -r -s -p "NVIDIA_API_KEY: " NVIDIA_API_KEY
-printf '\n'
-export NVIDIA_API_KEY
+cp .env.example .env
+# .env içindeki NVIDIA_API_KEY satırına kendi anahtarını yaz
 .venv/bin/python server.py
 ```
 
-Yapay zekâ olmadan arayüzü denemek için anahtar adımını atlayabilirsiniz; asistan devre dışı kalır. Sunucu varsayılan olarak `http://127.0.0.1:5173` adresinde açılır.
+`.env` Git tarafından yok sayılır ve yerel sunucu başlarken otomatik okunur. Anahtar olmadan da arayüz açılır, yalnızca AI kapalı kalır. Sunucu varsayılan olarak `http://127.0.0.1:5173` adresinde açılır.
 
 ### Windows PowerShell
 
@@ -57,17 +56,13 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Yapay zekâ özelliği için anahtarı gizli giriş olarak okuyup sunucuyu başlatın:
-
 ```powershell
-$secureKey = Read-Host "NVIDIA_API_KEY" -AsSecureString
-$keyPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
-try { $env:NVIDIA_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPtr) }
-finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPtr) }
+Copy-Item .env.example .env
+# .env dosyasını açıp NVIDIA_API_KEY satırına kendi anahtarını yaz
 .\.venv\Scripts\python.exe server.py
 ```
 
-Modeli değiştirmek isterseniz sunucuyu başlatmadan önce `NVIDIA_MODEL` ortam değişkenini ayarlayın; varsayılan model `z-ai/glm-5.3-flash`’tir.
+Modeli değiştirmek için `.env` içindeki `NVIDIA_MODEL` değerini güncelleyin; varsayılan model `z-ai/glm-5.3-flash`’tir. Ortam değişkenleri `.env` değerlerinden önceliklidir.
 
 ## InfinityFree’ye dağıtım
 
@@ -77,7 +72,7 @@ InfinityFree’de yayınlamak için PHP dağıtım dosyalarını hazırlayın:
 bash scripts/build-infinityfree.sh
 ```
 
-Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. Yapay zekâ varsayılan olarak kapalıdır; etkinleştirmek ve alan adı/DNS ayarlarını yapmak için [`INFINITYFREE.md`](INFINITYFREE.md) adımlarını izleyin. Gerçek NVIDIA anahtarını yalnızca hosting hesabındaki `api/nvidia/config.php` dosyasına yazın; bu dosya Git’e eklenmez.
+Oluşan `dist/infinityfree/` içeriğini alan adınızın `htdocs/` web köküne FTP veya File Manager ile yükleyin. Python sunucusu ve test dosyaları pakete alınmaz. `.env.example` dosyasını sunucuda `htdocs/.env` adıyla kopyalayıp `NVIDIA_API_KEY` satırını doldurarak AI’ı etkinleştirin. Gerçek `.env` Git’e eklenmez ve kök `.htaccess` üzerinden HTTP ile okunması engellenir. Ayrıntılı kurulum [`INFINITYFREE.md`](INFINITYFREE.md) içindedir.
 
 ## GitHub deposuna yükleme
 
@@ -122,6 +117,7 @@ Testler sunucu doğrulamalarını ve ön yüz sözleşmelerini denetler; gerçek
 ```text
 .
 ├── index.html                 # Web uygulaması
+├── .env.example               # Güvenli API yapılandırma şablonu
 ├── server.py                  # Yerel statik sunucu ve NVIDIA proxy’si
 ├── api/nvidia/                # InfinityFree PHP uç noktaları ve örnek ayar
 ├── scripts/build-infinityfree.sh

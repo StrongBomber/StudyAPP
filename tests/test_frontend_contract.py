@@ -39,6 +39,15 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("requestWithRetry('/api/nvidia/chat.php'", MODULE)
         self.assertNotIn("NVIDIA_API_KEY", MODULE)
 
+    def test_ai_setup_uses_a_private_env_file_and_server_side_connection_test(self):
+        self.assertIn('id="aiSetupModal"', STATIC_MARKUP)
+        self.assertIn('id="aiTestConnectionBtn"', STATIC_MARKUP)
+        self.assertIn('id="newAiChatBtn"', STATIC_MARKUP)
+        self.assertIn("fetch('/api/nvidia/test.php'", MODULE)
+        self.assertIn("function copyAiEnvExample()", MODULE)
+        self.assertNotIn('id="apiKeyInput"', STATIC_MARKUP)
+        self.assertNotRegex(HTML, r"nvapi-[A-Za-z0-9]")
+
     def test_progress_uses_current_pdf_instead_of_mock_weekly_data(self):
         self.assertNotIn("4 / 6 gün", STATIC_MARKUP)
         self.assertNotIn("+0 bugün", STATIC_MARKUP)
