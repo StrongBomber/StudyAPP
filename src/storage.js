@@ -66,7 +66,7 @@ function legacyStroke(stroke, documentId, pageNumber, index) {
     };
   }
   if (!points.length) return null;
-  const mode = ['ink', 'pencil', 'highlighter', 'fountain'].includes(stroke.mode) ? stroke.mode : 'ink';
+  const mode = ['ink', 'pencil', 'highlighter', 'fountain', 'marker', 'brush'].includes(stroke.mode) ? stroke.mode : 'ink';
   const size = Number.isFinite(sizeSource) ? sizeSource * 612 * (mode === 'highlighter' ? 2.35 / 3.25 : 1) : 2;
   return {
     id, tool: mode === 'highlighter' || stroke.tool === 'highlighter' ? 'highlighter' : 'pen', mode,

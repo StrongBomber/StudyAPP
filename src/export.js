@@ -95,6 +95,62 @@ async function embedDataImage(pdfDocument, dataUrl) {
   return pdfDocument.embedPng(imageBytesFromDataUrl(canvas.toDataURL('image/png')));
 }
 
+function pointInOutline(x, y, outline) {
+  let inside = false;
+  for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+    const a = outline[i], b = outline[j];
+    const crosses = (a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y || 1e-9) + a.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function drawPencilTexture(page, outline, stroke, color, pageHeight, blendModes, roundCap) {
+  if (outline.length < 3) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const point of outline) {
+    minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
+  }
+  const boundsWidth = Math.max(1, maxX - minX);
+  const boundsHeight = Math.max(1, maxY - minY);
+  const count = Math.max(16, Math.min(460, Math.round(boundsWidth * boundsHeight * .052)));
+  let seed = 2166136261;
+  for (const character of String(stroke.id || 'pencil')) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619) >>> 0;
+  const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  let grainAngle = -Math.PI / 4;
+  let tiltedPoints = 0;
+  for (const point of stroke.points || []) {
+    if (Math.hypot(point.tiltX || 0, point.tiltY || 0) > 4 && Number.isFinite(point.azimuthAngle)) {
+      grainAngle += point.azimuthAngle;
+      tiltedPoints += 1;
+    }
+  }
+  if (tiltedPoints) grainAngle /= tiltedPoints + 1;
+  const common = { color, opacity: .12, blendMode: blendModes?.Multiply, lineCap: roundCap };
+  const thickness = Math.max(.28, Math.min(.65, (Number(stroke.size) || 2) * .12));
+  for (let index = 0; index < count; index += 1) {
+    const x = minX + random() * boundsWidth;
+    const y = minY + random() * boundsHeight;
+    const length = .8 + random() * 2.8;
+    const angle = grainAngle + (random() - .5) * .72;
+    if (!pointInOutline(x, y, outline)) continue;
+    page.drawLine({
+      ...common, thickness,
+      start: { x, y: pageHeight - y },
+      end: { x: x + Math.cos(angle) * length, y: pageHeight - (y + Math.sin(angle) * length) },
+    });
+  }
+  const flecks = Math.round(count * .22);
+  for (let index = 0; index < flecks; index += 1) {
+    const size = .25 + random() * .55;
+    const x = minX + random() * boundsWidth;
+    const y = minY + random() * boundsHeight;
+    if (!pointInOutline(x, y, outline)) continue;
+    page.drawRectangle({ x, y: pageHeight - y - size, width: size, height: size, color, opacity: .075, blendMode: blendModes?.Multiply });
+  }
+}
+
 async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbeds, pdfDocument, blendModes) {
   if (stroke.kind === 'image') {
     if (typeof stroke.src !== 'string' || !stroke.src.startsWith('data:image/')) return;
@@ -116,7 +172,7 @@ async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbed
   const highlighter = stroke.tool === 'highlighter';
   const opacity = Number.isFinite(stroke.opacity)
     ? stroke.opacity
-    : highlighter ? .3 : stroke.mode === 'pencil' ? .62 : stroke.mode === 'marker' ? .88 : 1;
+    : highlighter ? .3 : stroke.mode === 'pencil' ? .72 : stroke.mode === 'marker' ? .9 : stroke.mode === 'brush' ? .96 : 1;
   const blendMode = highlighter || stroke.mode === 'pencil' ? blendModes?.Multiply : blendModes?.Normal;
   if (stroke.shape) {
     const thickness = Math.max(.65, (Number(stroke.size) || 2) * (highlighter ? 3.4 : 1));
@@ -142,6 +198,7 @@ async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbed
     opacity,
     blendMode,
   });
+  if (stroke.mode === 'pencil') drawPencilTexture(page, outline, stroke, color, height, blendModes, roundCap);
 }
 
 export async function createAnnotatedPdf(pdfBytes, pageData, title) {

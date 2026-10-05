@@ -110,8 +110,9 @@
               <span class="brush-type-indicator" aria-hidden="true"></span>
               <label class="visually-hidden" for="brushType">Kalem türü</label>
               <select id="brushType" aria-label="Kalem türü">
-                <option value="ink">Mürekkep</option>
+                <option value="ink">Tükenmez</option>
                 <option value="fountain">Dolma kalem</option>
+                <option value="brush">Fırça kalem</option>
                 <option value="pencil">Kurşun kalem</option>
                 <option value="marker">Keçeli kalem</option>
               </select>
@@ -141,9 +142,9 @@
             <div class="size-control">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M6 6h.01M6 12h.01M12 18h.01M18 18h.01"/></svg>
               <label class="visually-hidden" for="sizeRange">Kalem kalınlığı</label>
-              <input id="sizeRange" type="range" min="0.5" max="24" value="3" step="0.5">
+              <input id="sizeRange" type="range" min="0.5" max="24" value="2" step="0.5">
               <span class="brush-preview" id="brushPreview" aria-hidden="true"></span>
-              <span class="size-value" id="sizeValue">3 pt</span>
+              <span class="size-value" id="sizeValue">2 pt</span>
             </div>
             <span class="toolbar-separator opacity-separator" aria-hidden="true"></span>
             <div class="opacity-control">
@@ -151,6 +152,21 @@
               <label class="visually-hidden" for="opacityRange">Kalem opaklığı</label>
               <input id="opacityRange" type="range" min="10" max="100" value="100" step="5">
               <span class="opacity-value" id="opacityValue">100%</span>
+            </div>
+            <span class="toolbar-separator stabilization-separator" aria-hidden="true"></span>
+            <div class="stabilization-control" title="Çizginin titremesini azaltır; yüksek değer daha yumuşak çizgi verir">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16.5c3.1 0 3.1-9 6.2-9s3.1 9 6.2 9 3.1-9 5.6-9"/><path d="M3 20h18"/></svg>
+              <span class="stabilization-label">Denge</span>
+              <label class="visually-hidden" for="stabilizationRange">Çizgi dengeleme</label>
+              <input id="stabilizationRange" type="range" min="0" max="50" value="18" step="2">
+              <span class="stabilization-value" id="stabilizationValue">18%</span>
+            </div>
+            <div class="pressure-control" title="Apple Pencil basınç duyarlılığını ayarlar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5v-6m7.5 6V7m7.5 12.5V3.5M2.5 19.5h19"/></svg>
+              <span class="pressure-label">Baskı</span>
+              <label class="visually-hidden" for="pressureRange">Apple Pencil basınç duyarlılığı</label>
+              <input id="pressureRange" type="range" min="0" max="100" value="58" step="2">
+              <span class="pressure-value" id="pressureValue">58%</span>
             </div>
             <span class="toolbar-spacer"></span>
             <div class="tool-cluster history-tools" aria-label="Düzenleme geçmişi">

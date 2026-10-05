@@ -19,6 +19,8 @@ const elements = {
   completionCount: $('#completionCount'), completionMeter: $('#completionMeterFill'), undoButton: $('#undoButton'), redoButton: $('#redoButton'),
   toolButtons: [...document.querySelectorAll('[data-tool]')], brushTypeControl: $('#brushTypeControl'), brushType: $('#brushType'), shapePicker: $('#shapePicker'), shapeKind: $('#shapeKind'),
   colorButtons: [...document.querySelectorAll('[data-color]')], customColor: $('#customColorInput'), sizeRange: $('#sizeRange'), sizeValue: $('#sizeValue'), brushPreview: $('#brushPreview'), opacityRange: $('#opacityRange'), opacityValue: $('#opacityValue'),
+  stabilizationRange: $('#stabilizationRange'), stabilizationValue: $('#stabilizationValue'),
+  pressureRange: $('#pressureRange'), pressureValue: $('#pressureValue'),
   toastRegion: $('#toastRegion'),
 };
 
@@ -42,8 +44,10 @@ const state = {
   color: '#3449d8',
   penColor: '#3449d8',
   highlighterColor: '#ffd54a',
-  size: 3,
+  size: 2,
   opacity: 1,
+  stabilization: .18,
+  pressureSensitivity: .58,
   shapeType: 'line',
   zoom: 1,
   undo: [],
@@ -76,7 +80,37 @@ renderer.onImageLoaded = () => { if (state.pageData) scheduleInkRedraw(); };
 
 const MAX_HISTORY = 160;
 const ROW_HEIGHT = 40;
+const BRUSH_SETTINGS_KEY = 'cozum-study-brush-settings';
 let pageListTrack = null;
+
+function restoreBrushSettings() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(BRUSH_SETTINGS_KEY) || '{}') || {};
+    if (typeof saved !== 'object') return;
+    const brushTypes = ['ink', 'fountain', 'brush', 'pencil', 'marker'];
+    if (brushTypes.includes(saved.brushType)) {
+      state.brushType = saved.brushType;
+      elements.brushType.value = saved.brushType;
+    }
+    if (/^#[0-9a-f]{6}$/i.test(saved.penColor || '')) state.penColor = saved.penColor;
+    if (/^#[0-9a-f]{6}$/i.test(saved.highlighterColor || '')) state.highlighterColor = saved.highlighterColor;
+    state.color = state.penColor;
+    if (Number.isFinite(saved.size) && saved.size >= .5 && saved.size <= 24) elements.sizeRange.value = String(Math.round(saved.size * 2) / 2);
+    if (Number.isFinite(saved.opacity) && saved.opacity >= .1 && saved.opacity <= 1) elements.opacityRange.value = String(Math.round(saved.opacity * 100 / 5) * 5);
+    if (Number.isFinite(saved.stabilization) && saved.stabilization >= 0 && saved.stabilization <= .5) elements.stabilizationRange.value = String(Math.round(saved.stabilization * 50) * 2);
+    if (Number.isFinite(saved.pressureSensitivity) && saved.pressureSensitivity >= 0 && saved.pressureSensitivity <= 1) elements.pressureRange.value = String(Math.round(saved.pressureSensitivity * 50) * 2);
+  } catch (_) { /* preferences are optional in private or storage-restricted browsing */ }
+}
+
+function persistBrushSettings() {
+  try {
+    window.localStorage.setItem(BRUSH_SETTINGS_KEY, JSON.stringify({
+      brushType: state.brushType, penColor: state.penColor, highlighterColor: state.highlighterColor,
+      size: state.size, opacity: state.opacity, stabilization: state.stabilization,
+      pressureSensitivity: state.pressureSensitivity,
+    }));
+  } catch (_) { /* the drawing workspace remains usable when preferences cannot be stored */ }
+}
 
 function randomId() {
   return globalThis.crypto?.randomUUID?.() || `doc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -903,6 +937,7 @@ function setColor(color) {
   }
   elements.customColor.value = color;
   updateBrushPreview();
+  persistBrushSettings();
 }
 
 function updateBrushCursor(event) {
@@ -914,22 +949,37 @@ function updateBrushCursor(event) {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   if (x < 0 || y < 0 || x > rect.width || y > rect.height) { elements.brushCursor.hidden = true; return; }
-  const factor = state.tool === 'highlighter' ? 3.4 : state.brushType === 'marker' ? 1.35 : 1;
-  const diameter = Math.max(5, Math.min(90, state.size * renderer.pageViewport.scale * factor));
+  const mode = state.tool === 'highlighter' ? 'highlighter' : state.brushType;
+  const factor = mode === 'highlighter' ? 3.35 : mode === 'marker' ? 1.32 : 1;
+  let width = Math.max(5, Math.min(90, state.size * renderer.pageViewport.scale * factor));
+  let height = width;
+  const tilt = Math.min(1, Math.hypot(event.tiltX || 0, event.tiltY || 0) / 70);
+  const azimuth = Number.isFinite(event.azimuthAngle) && tilt > .04
+    ? event.azimuthAngle
+    : Math.atan2(event.tiltY || -1, event.tiltX || 1);
+  let angle = azimuth;
+  if (mode === 'marker' || mode === 'highlighter') height = width * (mode === 'highlighter' ? .14 : .2);
+  else if (mode === 'fountain') height = width * .34;
+  else if (mode === 'brush') height = width * .68;
+  else if (mode === 'pencil') {
+    width *= .72 + tilt * .55;
+    height = width * (.78 - tilt * .3);
+    angle += Math.PI / 2;
+  }
   elements.brushCursor.style.left = `${x}px`;
   elements.brushCursor.style.top = `${y}px`;
-  elements.brushCursor.style.width = `${diameter}px`;
-  elements.brushCursor.style.height = `${state.brushType === 'fountain' ? diameter * .62 : diameter}px`;
+  elements.brushCursor.style.width = `${width}px`;
+  elements.brushCursor.style.height = `${height}px`;
   elements.brushCursor.style.setProperty('--cursor-color', state.color);
   elements.brushCursor.style.opacity = String(Math.max(.25, brushOpacity()));
-  const angle = Number.isFinite(event.azimuthAngle) ? event.azimuthAngle : Math.atan2(event.tiltY || 0, event.tiltX || 1);
   elements.brushCursor.style.transform = `translate(-50%,-50%) rotate(${angle}rad)`;
-  elements.brushCursor.classList.toggle('is-flat', state.brushType === 'marker' || state.tool === 'highlighter');
+  elements.brushCursor.classList.toggle('is-flat', mode === 'marker' || mode === 'highlighter');
+  elements.brushCursor.classList.toggle('is-pencil', mode === 'pencil');
   elements.brushCursor.hidden = false;
 }
 
 function brushOpacity(tool = state.tool, mode = state.brushType) {
-  const baseOpacity = tool === 'highlighter' ? .3 : mode === 'pencil' ? .62 : mode === 'marker' ? .88 : 1;
+  const baseOpacity = tool === 'highlighter' ? .3 : mode === 'pencil' ? .72 : mode === 'marker' ? .9 : mode === 'brush' ? .96 : 1;
   return baseOpacity * state.opacity;
 }
 
@@ -937,13 +987,29 @@ function updateOpacityUI() {
   elements.opacityValue.textContent = `${Math.round(state.opacity * 100)}%`;
 }
 
+function updateStabilizationUI() {
+  elements.stabilizationValue.textContent = `${Math.round(state.stabilization * 100)}%`;
+}
+
+function updatePressureUI() {
+  elements.pressureValue.textContent = `${Math.round(state.pressureSensitivity * 100)}%`;
+}
+
 function updateBrushPreview() {
+  const mode = state.tool === 'highlighter' ? 'highlighter' : state.brushType;
   const diameter = Math.max(3, Math.min(18, state.size * 1.25));
-  elements.brushPreview.style.width = `${diameter}px`;
-  elements.brushPreview.style.height = `${diameter}px`;
+  let width = diameter, height = diameter, angle = 0;
+  if (mode === 'highlighter' || mode === 'marker') { width = 16; height = 5; angle = -28; }
+  else if (mode === 'fountain') { width = diameter * 1.45; height = diameter * .38; angle = -25; }
+  else if (mode === 'brush') { width = diameter * 1.3; height = diameter * .66; angle = -18; }
+  else if (mode === 'pencil') { width = diameter * .82; height = diameter * .68; angle = 32; }
+  elements.brushPreview.style.width = `${width}px`;
+  elements.brushPreview.style.height = `${height}px`;
+  elements.brushPreview.style.transform = `rotate(${angle}deg)`;
   elements.brushPreview.style.backgroundColor = state.color;
   elements.brushPreview.style.opacity = String(brushOpacity());
-  elements.brushPreview.classList.toggle('is-flat', state.brushType === 'marker' || state.tool === 'highlighter');
+  elements.brushPreview.classList.toggle('is-flat', mode === 'marker' || mode === 'highlighter');
+  elements.brushPreview.classList.toggle('is-calligraphy', mode === 'fountain' || mode === 'brush');
 }
 
 function updateSizeUI() {
@@ -1006,7 +1072,8 @@ function addStroke(stroke) {
   state.pageData.strokes.push(stroke);
   pushHistory({ type: 'add', index, stroke });
   renderer.clearLive();
-  scheduleInkRedraw();
+  renderer.drawCommittedStroke(stroke);
+  updateImageOverlay();
   queuePageSave();
 }
 
@@ -1158,7 +1225,12 @@ function handlePointerDown(event) {
     };
   } else {
     const mode = state.tool === 'pen' ? state.brushType : state.tool;
-    state.activeStroke = { id: randomId(), tool: state.tool, mode, color: state.color, size: state.size, opacity: brushOpacity(state.tool, mode), points: [] };
+    const nibAngle = Math.hypot(point.tiltX || 0, point.tiltY || 0) > 4 ? point.azimuthAngle : -Math.PI / 4;
+    state.activeStroke = {
+      id: randomId(), tool: state.tool, mode, color: state.color, size: state.size,
+      opacity: brushOpacity(state.tool, mode), stabilization: state.stabilization,
+      pressureSensitivity: state.pressureSensitivity, nibAngle, points: [],
+    };
     addPoint(state.activeStroke, point, true);
   }
   state.predictedPoints = [];
@@ -1237,7 +1309,24 @@ function finishPointer(event, cancelled = false) {
   const stroke = state.activeStroke;
   if (!stroke) { state.activePointerId = null; state.pointerTool = null; state.pointerRect = null; return; }
   if (!cancelled) {
+    if (!stroke.shape) {
+      let coalesced = [];
+      try { coalesced = event.getCoalescedEvents?.() || []; } catch (_) { /* pointerup coalescing is optional */ }
+      for (const sample of coalesced) {
+        if (Number.isFinite(sample.pressure) && sample.pressure > 0) addPoint(stroke, renderer.normalizedPoint(sample, state.pointerRect));
+      }
+    }
     const point = renderer.normalizedPoint(event, state.pointerRect || undefined);
+    if (!stroke.shape && event.pointerType === 'pen' && !(event.pressure > 0)) {
+      const previous = stroke.points[stroke.points.length - 1];
+      if (previous) {
+        point.pressure = previous.pressure;
+        point.tiltX = previous.tiltX;
+        point.tiltY = previous.tiltY;
+        point.altitudeAngle = previous.altitudeAngle;
+        point.azimuthAngle = previous.azimuthAngle;
+      }
+    }
     if (stroke.shape) {
       const rect = state.pointerRect || elements.liveCanvas.getBoundingClientRect();
       stroke.shape.end = snapShapeEnd(stroke.shape.start, point, stroke.shape.type, event.shiftKey, rect.width, rect.height);
@@ -1421,7 +1510,7 @@ function addEventListeners() {
   }, { passive: false });
 
   for (const button of elements.toolButtons) button.addEventListener('click', () => setTool(button.dataset.tool));
-  elements.brushType.addEventListener('change', () => { state.brushType = elements.brushType.value; updateBrushPreview(); });
+  elements.brushType.addEventListener('change', () => { state.brushType = elements.brushType.value; updateBrushPreview(); persistBrushSettings(); });
   elements.shapeKind.addEventListener('change', () => { state.shapeType = elements.shapeKind.value; });
   for (const button of elements.colorButtons) button.addEventListener('click', () => setColor(button.dataset.color));
   elements.customColor.addEventListener('input', () => setColor(elements.customColor.value));
@@ -1434,6 +1523,17 @@ function addEventListeners() {
     updateOpacityUI();
     updateBrushPreview();
   });
+  elements.stabilizationRange.addEventListener('input', () => {
+    state.stabilization = Number(elements.stabilizationRange.value) / 100;
+    updateStabilizationUI();
+  });
+  elements.pressureRange.addEventListener('input', () => {
+    state.pressureSensitivity = Number(elements.pressureRange.value) / 100;
+    updatePressureUI();
+  });
+  for (const input of [elements.sizeRange, elements.opacityRange, elements.stabilizationRange, elements.pressureRange]) {
+    input.addEventListener('change', persistBrushSettings);
+  }
   elements.undoButton.addEventListener('click', undo);
   elements.redoButton.addEventListener('click', redo);
 
@@ -1545,12 +1645,17 @@ function addEventListeners() {
 
 async function initialize() {
   addEventListeners();
-  setTool('pen');
-  setColor(state.color);
+  restoreBrushSettings();
   state.size = Number(elements.sizeRange.value);
   state.opacity = Number(elements.opacityRange.value) / 100;
+  state.stabilization = Number(elements.stabilizationRange.value) / 100;
+  state.pressureSensitivity = Number(elements.pressureRange.value) / 100;
+  setTool('pen');
+  setColor(state.color);
   updateSizeUI();
   updateOpacityUI();
+  updateStabilizationUI();
+  updatePressureUI();
   updatePageUI();
   updateZoomUI();
   try {

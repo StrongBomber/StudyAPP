@@ -43,8 +43,8 @@ Sertifika kurulmadan önce yönlendirme sorun çıkarırsa `.htaccess` içindeki
 - [ ] PDF.js dosyaları yükleniyor (`vendor/pdf.min.mjs` ve `vendor/pdf.worker.min.mjs`)
 - [ ] **Örnek belgeyle dene** çalışıyor
 - [ ] Kendi PDF'in açılıyor ve sayfalar arasında geçiliyor
-- [ ] Apple Pencil 2 ile farklı basınçta ince/kalın çizgi; eğimle dolma ve kurşun kalem davranışı
-- [ ] Fırça türleri, renk/kalınlık/opaklık ayarı, silgi ve şekiller çalışıyor
+- [ ] Apple Pencil 2 ile farklı basınçta ince/kalın çizgi; eğim ve açıyla dolma, fırça, kurşun ve keçeli kalem davranışı
+- [ ] Basınç duyarlılığı ve çizgi dengeleme ayarları, renk/kalınlık/opaklık, silgi ve şekiller çalışıyor
 - [ ] Parmak çizim yapmıyor; sayfayı kaydırıyor ve iki parmakla yakınlaştırıyor
 - [ ] PNG/JPEG/WebP/GIF/BMP görsel ekleme, taşıma ve boyutlandırma çalışıyor
 - [ ] Yenileyince son belge, görseller ve çizimler geri geliyor

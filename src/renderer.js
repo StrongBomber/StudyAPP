@@ -14,17 +14,78 @@ function isCancellation(error) {
   return error?.name === 'RenderingCancelledException' || /cancelled/i.test(error?.message || '');
 }
 
-function drawPencilGrain(ctx, outline, stroke) {
+function angleDifference(from, to) {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+function previewPointError(point, start, end, width, height, pressureWeight, angleWeight) {
+  const ax = start.x * width, ay = start.y * height;
+  const bx = end.x * width, by = end.y * height;
+  const px = point.x * width, py = point.y * height;
+  const dx = bx - ax, dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared ? clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1) : 0;
+  const xError = px - (ax + dx * t);
+  const yError = py - (ay + dy * t);
+  const pressure = Math.abs((point.pressure ?? .5) - ((start.pressure ?? .5) + ((end.pressure ?? .5) - (start.pressure ?? .5)) * t)) * pressureWeight;
+  const angle = Math.abs(angleDifference(start.azimuthAngle || 0, point.azimuthAngle || 0)) * angleWeight;
+  return Math.hypot(xError, yError, pressure, angle);
+}
+
+function simplifyPreviewPoints(points, width, height, stroke, limit = 420) {
+  if (points.length <= limit) return points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack = [[0, points.length - 1]];
+  const tolerance = .72;
+  const pressureWeight = Math.max(2, (Number(stroke.size) || 2) * .55);
+  const angleWeight = Math.max(.5, (Number(stroke.size) || 2) * .08);
+  while (stack.length) {
+    const [first, last] = stack.pop();
+    if (last - first < 2) continue;
+    let greatestError = tolerance;
+    let greatestIndex = -1;
+    for (let index = first + 1; index < last; index += 1) {
+      const error = previewPointError(points[index], points[first], points[last], width, height, pressureWeight, angleWeight);
+      if (error > greatestError) { greatestError = error; greatestIndex = index; }
+    }
+    if (greatestIndex >= 0) {
+      keep[greatestIndex] = 1;
+      stack.push([first, greatestIndex], [greatestIndex, last]);
+    }
+  }
+  const selected = [];
+  for (let index = 0; index < points.length; index += 1) if (keep[index]) selected.push(points[index]);
+  if (selected.length <= limit) return selected;
+  const reduced = [];
+  for (let index = 0; index < limit; index += 1) reduced.push(selected[Math.round(index * (selected.length - 1) / (limit - 1))]);
+  return reduced;
+}
+
+function drawPencilGrain(ctx, outline, stroke, scale = 1) {
+  if (outline.length < 3) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const point of outline) {
     minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
     maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
   }
-  const area = Math.max(1, (maxX - minX) * (maxY - minY));
-  const count = Math.max(18, Math.min(700, Math.round(area * .09)));
+  const boundsWidth = Math.max(1, maxX - minX);
+  const boundsHeight = Math.max(1, maxY - minY);
+  const area = boundsWidth * boundsHeight;
+  const count = Math.max(16, Math.min(460, Math.round(area * .052)));
   let seed = 2166136261;
   for (const character of String(stroke.id || 'pencil')) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619) >>> 0;
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  let grainAngle = -Math.PI / 4;
+  let tiltedPoints = 0;
+  for (const point of stroke.points || []) {
+    if (Math.hypot(point.tiltX || 0, point.tiltY || 0) > 4 && Number.isFinite(point.azimuthAngle)) {
+      grainAngle += point.azimuthAngle;
+      tiltedPoints += 1;
+    }
+  }
+  if (tiltedPoints) grainAngle /= tiltedPoints + 1;
 
   ctx.save();
   ctx.beginPath();
@@ -32,13 +93,26 @@ function drawPencilGrain(ctx, outline, stroke) {
   for (let index = 1; index < outline.length; index += 1) ctx.lineTo(outline[index].x, outline[index].y);
   ctx.closePath();
   ctx.clip();
-  ctx.globalAlpha = .13;
-  ctx.fillStyle = stroke.color || '#20283b';
+  ctx.strokeStyle = stroke.color || '#20283b';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(.28, Math.min(.65, (Number(stroke.size) || 2) * scale * .12));
+  ctx.globalAlpha = .12;
+  ctx.beginPath();
   for (let index = 0; index < count; index += 1) {
-    const x = minX + random() * (maxX - minX);
-    const y = minY + random() * (maxY - minY);
-    const size = .35 + random() * .8;
-    ctx.fillRect(x, y, size, size * (.6 + random() * .8));
+    const x = minX + random() * boundsWidth;
+    const y = minY + random() * boundsHeight;
+    const length = (.8 + random() * 2.8) * Math.max(.7, scale);
+    const angle = grainAngle + (random() - .5) * .72;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = .075;
+  ctx.fillStyle = stroke.color || '#20283b';
+  const flecks = Math.round(count * .22);
+  for (let index = 0; index < flecks; index += 1) {
+    const size = .25 + random() * .55;
+    ctx.fillRect(minX + random() * boundsWidth, minY + random() * boundsHeight, size, size);
   }
   ctx.restore();
 }
@@ -238,13 +312,24 @@ export class PdfRenderer {
     for (const stroke of strokes || []) this.drawStroke(ctx, stroke, width, height);
   }
 
+  drawCommittedStroke(stroke) {
+    const width = this.pageViewport?.width || 0;
+    const height = this.pageViewport?.height || 0;
+    if (!width || !height) return;
+    this.drawStroke(this.inkCanvas.getContext('2d'), stroke, width, height);
+  }
+
   drawLive(stroke) {
     const ctx = this.liveCanvas.getContext('2d');
     const width = this.pageViewport?.width || 0;
     const height = this.pageViewport?.height || 0;
     ctx.clearRect(0, 0, width, height);
     if (!stroke || !width || !height) return;
-    this.drawStroke(ctx, stroke, width, height);
+    // Keep live feedback bounded on long strokes; the saved/exported line still uses every Pencil sample.
+    const points = stroke.points?.length > 420
+      ? simplifyPreviewPoints(stroke.points, width, height, stroke)
+      : stroke.points;
+    this.drawStroke(ctx, points === stroke.points ? stroke : { ...stroke, points }, width, height, { preview: true });
   }
 
   drawPredicted(stroke, predictedPoints = []) {
@@ -254,7 +339,8 @@ export class PdfRenderer {
     ctx.clearRect(0, 0, width, height);
     if (!stroke || stroke.shape || !predictedPoints.length || !stroke.points?.length) return;
     const previous = stroke.points[stroke.points.length - 1];
-    this.drawStroke(ctx, { ...stroke, points: [previous, ...predictedPoints] }, width, height);
+    const opacity = Number.isFinite(stroke.opacity) ? stroke.opacity : 1;
+    this.drawStroke(ctx, { ...stroke, opacity: opacity * .45, points: [previous, ...predictedPoints.slice(0, 3)] }, width, height, { preview: true, alpha: .72 });
   }
 
   clearLive() {
@@ -264,7 +350,7 @@ export class PdfRenderer {
     this.predictedCanvas.getContext('2d').clearRect(0, 0, width, height);
   }
 
-  drawStroke(ctx, stroke, width, height) {
+  drawStroke(ctx, stroke, width, height, { preview = false, alpha = 1 } = {}) {
     if (!stroke || !width || !height) return;
     if (stroke.kind === 'image') {
       if (typeof stroke.src !== 'string' || !stroke.src.startsWith('data:image/')) return;
@@ -290,9 +376,9 @@ export class PdfRenderer {
     const scale = this.pageViewport?.scale || 1;
     const highlighter = stroke.tool === 'highlighter';
     ctx.save();
-    ctx.globalAlpha = Number.isFinite(stroke.opacity)
+    ctx.globalAlpha = (Number.isFinite(stroke.opacity)
       ? stroke.opacity
-      : highlighter ? .3 : stroke.mode === 'pencil' ? .62 : stroke.mode === 'marker' ? .88 : 1;
+      : highlighter ? .3 : stroke.mode === 'pencil' ? .72 : stroke.mode === 'marker' ? .9 : stroke.mode === 'brush' ? .96 : 1) * alpha;
     ctx.globalCompositeOperation = highlighter || stroke.mode === 'pencil' ? 'multiply' : 'source-over';
     ctx.fillStyle = stroke.color || '#20283b';
     ctx.strokeStyle = ctx.fillStyle;
@@ -310,7 +396,7 @@ export class PdfRenderer {
         for (let index = 1; index < outline.length; index += 1) ctx.lineTo(outline[index].x, outline[index].y);
         ctx.closePath();
         ctx.fill();
-        if (stroke.mode === 'pencil') drawPencilGrain(ctx, outline, stroke);
+        if (stroke.mode === 'pencil' && !preview) drawPencilGrain(ctx, outline, stroke, scale);
       }
     }
     ctx.restore();

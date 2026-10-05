@@ -6,11 +6,13 @@ PDF soru bankaları ve ders notları üzerinde çalışmak için hazırlanmış,
 
 - PDF açmak, sürükleyip bırakmak ve örnek belgeyle başlamak
 - Sayfalar arasında gezinmek, sayfaya sığdırmak ve yakınlaştırmak
-- Mürekkep, dolma kalem, kurşun kalem, keçeli kalem ve fosforlu kalem uçları
-- Apple Pencil basınç ve eğim bilgisini kullanmak; akıcı çizgi için birleştirilmiş ve tahmin edilen Pencil örneklerinden yararlanmak
+- Basınca göre kalınlaşıp incelen tükenmez, kontrastlı dolma kalem, fırça kalem, dokulu kurşun kalem, kesik uçlu keçeli ve fosforlu kalem
+- Apple Pencil basınç/eğim/açı verisi, tahmin edilen Pencil örnekleri ve ayarlanabilir basınç duyarlılığı/çizgi dengeleme
+- Uzun çizgilerde düşük gecikmeli önizleme; bırakınca aynı çizginin tam kaliteli vektör olarak işlenmesi
 - Silgi, sayfayı taşıma ve vektörel çizgi, ok, dikdörtgen, elips ve üçgen araçları
 - Parmakla sayfayı kaydırmak; iki parmakla yakınlaştırmak (parmakla çizim kapalı)
-- Renk, kalınlık ve opaklığı ayrı ayarlamak; Pencil gezinmesini destekleyen iPad'lerde uç önizlemesi görmek
+- Renk, kalınlık, opaklık, basınç tepkisi ve dengeyi ayrı ayarlamak; kalem tercihlerini sonraki oturum için hatırlamak
+- Apple Pencil gezinmesini destekleyen iPad'lerde uca göre şekillenen imleç önizlemesi görmek
 - Sayfaya görsel eklemek, sürükleyerek taşımak ve köşeden boyutlandırmak
 - Geri al / yinele ve klavye kısayolları
 - Her sayfaya bağlı not yazmak ve sayfaları tamamlandı olarak işaretlemek
