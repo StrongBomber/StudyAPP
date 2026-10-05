@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#f4f6fb">
   <meta name="description" content="PDF'lerini aç, çöz, not al. Çalışmaların cihazında güvenle saklanır.">
   <title>Çözüm — PDF çalışma alanı</title>
@@ -104,6 +106,16 @@
               </button>
             </div>
             <span class="toolbar-separator" aria-hidden="true"></span>
+            <div class="brush-type-control" id="brushTypeControl">
+              <span class="brush-type-indicator" aria-hidden="true"></span>
+              <label class="visually-hidden" for="brushType">Kalem türü</label>
+              <select id="brushType" aria-label="Kalem türü">
+                <option value="ink">Mürekkep</option>
+                <option value="fountain">Dolma kalem</option>
+                <option value="pencil">Kurşun kalem</option>
+                <option value="marker">Keçeli kalem</option>
+              </select>
+            </div>
             <div class="shape-picker" id="shapePicker" hidden>
               <label class="visually-hidden" for="shapeKind">Şekil türü</label>
               <select id="shapeKind" aria-label="Şekil türü">
@@ -118,8 +130,8 @@
             <div class="color-picker" role="group" aria-label="Kalem rengi">
               <button class="color-swatch is-selected" type="button" data-color="#3449d8" style="--swatch:#3449d8" aria-label="Lacivert" aria-pressed="true"></button>
               <button class="color-swatch" type="button" data-color="#e25353" style="--swatch:#e25353" aria-label="Kırmızı" aria-pressed="false"></button>
-              <button class="color-swatch" type="button" data-color="#15936e" style="--swatch:#15936e" aria-label="Yeşil" aria-pressed="false"></button>
               <button class="color-swatch" type="button" data-color="#222a3b" style="--swatch:#222a3b" aria-label="Grafit" aria-pressed="false"></button>
+              <button class="color-swatch" type="button" data-color="#ffd54a" style="--swatch:#ffd54a" aria-label="Sarı" aria-pressed="false"></button>
               <label class="custom-color" title="Başka bir renk seç">
                 <input id="customColorInput" type="color" value="#3449d8" aria-label="Özel renk seç">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17h1.2a2.3 2.3 0 0 0 1.5-4c-.7-.6-.25-1.7.7-1.7H17a3.5 3.5 0 0 0 3.5-3.5A7.8 7.8 0 0 0 12 3.5Z"/><circle cx="7.8" cy="11" r=".75"/><circle cx="10.4" cy="7.9" r=".75"/><circle cx="14.2" cy="8.2" r=".75"/></svg>
@@ -129,8 +141,16 @@
             <div class="size-control">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M6 6h.01M6 12h.01M12 18h.01M18 18h.01"/></svg>
               <label class="visually-hidden" for="sizeRange">Kalem kalınlığı</label>
-              <input id="sizeRange" type="range" min="1" max="12" value="3" step="0.5">
+              <input id="sizeRange" type="range" min="0.5" max="24" value="3" step="0.5">
+              <span class="brush-preview" id="brushPreview" aria-hidden="true"></span>
               <span class="size-value" id="sizeValue">3 pt</span>
+            </div>
+            <span class="toolbar-separator opacity-separator" aria-hidden="true"></span>
+            <div class="opacity-control">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 0 17V3.5Z"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17"/></svg>
+              <label class="visually-hidden" for="opacityRange">Kalem opaklığı</label>
+              <input id="opacityRange" type="range" min="10" max="100" value="100" step="5">
+              <span class="opacity-value" id="opacityValue">100%</span>
             </div>
             <span class="toolbar-spacer"></span>
             <div class="tool-cluster history-tools" aria-label="Düzenleme geçmişi">
@@ -172,6 +192,7 @@
               <canvas id="inkCanvas" aria-hidden="true"></canvas>
               <canvas id="liveCanvas" aria-label="PDF üzerine çizim alanı"></canvas>
               <canvas id="predictedCanvas" aria-hidden="true"></canvas>
+              <div class="brush-cursor" id="brushCursor" hidden aria-hidden="true"></div>
               <div class="image-overlay" id="imageOverlay" hidden aria-label="Seçili görsel">
                 <button class="image-delete" id="deleteImageButton" type="button" aria-label="Görseli kaldır" title="Görseli kaldır"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
                 <button class="image-resize-handle" id="imageResizeHandle" type="button" aria-label="Görseli yeniden boyutlandır" title="Sürükleyerek boyutlandır"><span></span></button>
@@ -185,9 +206,9 @@
                 <div class="art-pencil"><span></span></div>
                 <span class="art-spark spark-one">✳</span><span class="art-spark spark-two">✦</span>
               </div>
-              <span class="eyebrow">KENDİ TEMPOYLA. KENDİ YÖNTEMİNLE.</span>
+              <span class="eyebrow">iPAD + APPLE PENCIL İÇİN TASARLANDI</span>
               <h2>Çalışmanın en iyi<br>hâli burada başlar.</h2>
-              <p>PDF’ini aç. Çöz, çiz, not al.<br>Her şey bu cihazda saklansın.</p>
+              <p>Apple Pencil ile yaz. Parmakla sayfayı taşı.<br>Çalışmaların bu iPad'de saklansın.</p>
               <button class="button button-primary welcome-open-button" id="welcomeOpenButton" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> PDF aç
               </button>

@@ -1,3 +1,5 @@
+import { createStrokeOutline } from './stroke.js';
+
 function pdfColor(hex, rgb) {
   const value = String(hex || '#3449d8').replace('#', '');
   const normalized = value.length === 3 ? value.split('').map((x) => x + x).join('') : value;
@@ -8,14 +10,6 @@ function pdfColor(hex, rgb) {
 
 function pdfPoint(point, width, height) {
   return { x: point.x * width, y: (1 - point.y) * height };
-}
-
-function pressureScale(stroke, pressure) {
-  const value = Number.isFinite(pressure) ? pressure : .5;
-  if (stroke.mode === 'pencil') return .42 + value * .82;
-  if (stroke.mode === 'fountain') return .28 + value * 1.52;
-  if (stroke.mode === 'ink') return .48 + value * .88;
-  return .35 + value * 1.3;
 }
 
 function line(page, start, end, color, thickness, opacity, roundCap) {
@@ -101,7 +95,7 @@ async function embedDataImage(pdfDocument, dataUrl) {
   return pdfDocument.embedPng(imageBytesFromDataUrl(canvas.toDataURL('image/png')));
 }
 
-async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbeds, pdfDocument) {
+async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbeds, pdfDocument, blendModes) {
   if (stroke.kind === 'image') {
     if (typeof stroke.src !== 'string' || !stroke.src.startsWith('data:image/')) return;
     let embedded = imageEmbeds.get(stroke.src);
@@ -119,31 +113,41 @@ async function drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbed
     return;
   }
   const color = pdfColor(stroke.color, rgb);
-  const isHighlighter = stroke.tool === 'highlighter';
-  const opacity = Number.isFinite(stroke.opacity) ? stroke.opacity : (isHighlighter ? .29 : 1);
-  const baseThickness = Math.max(.65, (Number(stroke.size) || 2) * (isHighlighter ? 3.2 : 1));
+  const highlighter = stroke.tool === 'highlighter';
+  const opacity = Number.isFinite(stroke.opacity)
+    ? stroke.opacity
+    : highlighter ? .3 : stroke.mode === 'pencil' ? .62 : stroke.mode === 'marker' ? .88 : 1;
+  const blendMode = highlighter || stroke.mode === 'pencil' ? blendModes?.Multiply : blendModes?.Normal;
   if (stroke.shape) {
-    drawShape(page, stroke.shape, width, height, color, baseThickness * (stroke.legacyShape ? 1.36 : 1), opacity, roundCap);
+    const thickness = Math.max(.65, (Number(stroke.size) || 2) * (highlighter ? 3.4 : 1));
+    drawShape(page, stroke.shape, width, height, color, thickness, opacity, roundCap);
     return;
   }
-  const points = stroke.points || [];
-  if (points.length === 1) {
-    const p = pdfPoint(points[0], width, height);
-    const pressureWidth = stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, points[0].pressure);
-    page.drawCircle({ x: p.x, y: p.y, size: baseThickness * pressureWidth / 2, color, opacity });
-    return;
+
+  const outline = createStrokeOutline(stroke, width, height, 1);
+  if (outline.length < 3) return;
+  let minX = Infinity;
+  let minY = Infinity;
+  for (const point of outline) { minX = Math.min(minX, point.x); minY = Math.min(minY, point.y); }
+  const svgNumber = (value) => Number(value.toFixed(3));
+  const commands = [`M ${svgNumber(outline[0].x - minX)} ${svgNumber(outline[0].y - minY)}`];
+  for (let index = 1; index < outline.length; index += 1) {
+    commands.push(`L ${svgNumber(outline[index].x - minX)} ${svgNumber(outline[index].y - minY)}`);
   }
-  for (let index = 1; index < points.length; index += 1) {
-    const pressure = ((points[index - 1].pressure || .5) + (points[index].pressure || .5)) / 2;
-    const thickness = baseThickness * (stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, pressure));
-    line(page, pdfPoint(points[index - 1], width, height), pdfPoint(points[index], width, height), color, thickness, opacity, roundCap);
-  }
+  const path = `${commands.join(' ')} Z`;
+  page.drawSvgPath(path, {
+    x: minX,
+    y: height - minY,
+    color,
+    opacity,
+    blendMode,
+  });
 }
 
 export async function createAnnotatedPdf(pdfBytes, pageData, title) {
   const PDFLib = window.PDFLib;
   if (!PDFLib?.PDFDocument) throw new Error('PDF dışa aktarma bileşeni yüklenemedi. Sayfayı yenileyip tekrar deneyin.');
-  const { PDFDocument, rgb, LineCapStyle } = PDFLib;
+  const { PDFDocument, rgb, LineCapStyle, BlendMode } = PDFLib;
   const document = await PDFDocument.load(pdfBytes, { updateMetadata: true });
   const pages = document.getPages();
   const imageEmbeds = new Map();
@@ -152,7 +156,7 @@ export async function createAnnotatedPdf(pdfBytes, pageData, title) {
     const page = pages[pageNumber - 1];
     if (!page || !data?.strokes?.length) continue;
     const { width, height } = page.getSize();
-    for (const stroke of data.strokes) await drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbeds, document);
+    for (const stroke of data.strokes) await drawStroke(page, stroke, width, height, rgb, roundCap, imageEmbeds, document, BlendMode);
   }
   if (title) document.setTitle(`${title.replace(/\.pdf$/i, '')} — Çözüm`);
   document.setProducer('Çözüm PDF çalışma alanı');

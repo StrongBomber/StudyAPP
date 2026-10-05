@@ -11,14 +11,14 @@ const elements = {
   previousPage: $('#previousPageButton'), nextPage: $('#nextPageButton'), zoomOut: $('#zoomOutButton'), zoomIn: $('#zoomInButton'),
   zoomReadout: $('#zoomReadout'), documentPageLabel: $('#workspacePageLabel'), viewer: $('#viewer'), viewerScroll: $('#viewerScroll'),
   paper: $('#paper'), pdfCanvas: $('#pdfCanvas'), inkCanvas: $('#inkCanvas'), liveCanvas: $('#liveCanvas'), predictedCanvas: $('#predictedCanvas'),
-  imageOverlay: $('#imageOverlay'), imageInput: $('#imageFileInput'), imageInsertButton: $('#insertImageButton'), imageDeleteButton: $('#deleteImageButton'), imageResizeHandle: $('#imageResizeHandle'), welcome: $('#welcomePanel'),
+  imageOverlay: $('#imageOverlay'), brushCursor: $('#brushCursor'), imageInput: $('#imageFileInput'), imageInsertButton: $('#insertImageButton'), imageDeleteButton: $('#deleteImageButton'), imageResizeHandle: $('#imageResizeHandle'), welcome: $('#welcomePanel'),
   loading: $('#loadingOverlay'), loadingText: $('#loadingText'), viewerHint: $('#viewerHint'), exportButton: $('#exportButton'),
   saveStatus: $('#saveStatus'), saveStatusText: $('#saveStatusText'), panelToggle: $('#panelToggleButton'), panelClose: $('#panelCloseButton'),
   notesPanel: $('#notesPanel'), note: $('#pageNote'), notesDocumentName: $('#notesDocumentName'), notesPageContext: $('#notesPageContext'),
   completionButton: $('#completionButton'), completionTitle: $('#completionTitle'), completionSubtitle: $('#completionSubtitle'),
   completionCount: $('#completionCount'), completionMeter: $('#completionMeterFill'), undoButton: $('#undoButton'), redoButton: $('#redoButton'),
-  toolButtons: [...document.querySelectorAll('[data-tool]')], shapePicker: $('#shapePicker'), shapeKind: $('#shapeKind'),
-  colorButtons: [...document.querySelectorAll('[data-color]')], customColor: $('#customColorInput'), sizeRange: $('#sizeRange'), sizeValue: $('#sizeValue'),
+  toolButtons: [...document.querySelectorAll('[data-tool]')], brushTypeControl: $('#brushTypeControl'), brushType: $('#brushType'), shapePicker: $('#shapePicker'), shapeKind: $('#shapeKind'),
+  colorButtons: [...document.querySelectorAll('[data-color]')], customColor: $('#customColorInput'), sizeRange: $('#sizeRange'), sizeValue: $('#sizeValue'), brushPreview: $('#brushPreview'), opacityRange: $('#opacityRange'), opacityValue: $('#opacityValue'),
   toastRegion: $('#toastRegion'),
 };
 
@@ -38,8 +38,12 @@ const state = {
   pageNumber: 1,
   pageData: null,
   tool: 'pen',
+  brushType: 'ink',
   color: '#3449d8',
+  penColor: '#3449d8',
+  highlighterColor: '#ffd54a',
   size: 3,
+  opacity: 1,
   shapeType: 'line',
   zoom: 1,
   undo: [],
@@ -869,31 +873,82 @@ function scheduleLiveDraw() {
 
 function setTool(tool) {
   if (!['pen', 'highlighter', 'eraser', 'shape', 'hand'].includes(tool)) return;
+  const previousTool = state.tool;
   if (tool !== 'hand') deselectImage();
   state.tool = tool;
+  if (tool === 'highlighter' && previousTool !== 'highlighter') setColor(state.highlighterColor);
+  else if (tool !== 'highlighter' && previousTool === 'highlighter') setColor(state.penColor);
   for (const button of elements.toolButtons) {
     const active = button.dataset.tool === tool;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-pressed', String(active));
   }
   elements.shapePicker.hidden = tool !== 'shape';
+  elements.brushTypeControl.hidden = tool !== 'pen';
   elements.paper.dataset.tool = tool;
   elements.paper.classList.remove('is-panning');
+  if (!['pen', 'highlighter'].includes(tool)) elements.brushCursor.hidden = true;
+  updateBrushPreview();
 }
 
 function setColor(color) {
   if (!/^#[0-9a-f]{6}$/i.test(color)) return;
   state.color = color;
+  if (state.tool === 'highlighter') state.highlighterColor = color;
+  else state.penColor = color;
   for (const button of elements.colorButtons) {
     const active = button.dataset.color?.toLowerCase() === color.toLowerCase();
     button.classList.toggle('is-selected', active);
     button.setAttribute('aria-pressed', String(active));
   }
   elements.customColor.value = color;
+  updateBrushPreview();
+}
+
+function updateBrushCursor(event) {
+  if (!state.document || !renderer.pageViewport || !['pen', 'highlighter'].includes(state.tool)) {
+    elements.brushCursor.hidden = true;
+    return;
+  }
+  const rect = elements.paper.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if (x < 0 || y < 0 || x > rect.width || y > rect.height) { elements.brushCursor.hidden = true; return; }
+  const factor = state.tool === 'highlighter' ? 3.4 : state.brushType === 'marker' ? 1.35 : 1;
+  const diameter = Math.max(5, Math.min(90, state.size * renderer.pageViewport.scale * factor));
+  elements.brushCursor.style.left = `${x}px`;
+  elements.brushCursor.style.top = `${y}px`;
+  elements.brushCursor.style.width = `${diameter}px`;
+  elements.brushCursor.style.height = `${state.brushType === 'fountain' ? diameter * .62 : diameter}px`;
+  elements.brushCursor.style.setProperty('--cursor-color', state.color);
+  elements.brushCursor.style.opacity = String(Math.max(.25, brushOpacity()));
+  const angle = Number.isFinite(event.azimuthAngle) ? event.azimuthAngle : Math.atan2(event.tiltY || 0, event.tiltX || 1);
+  elements.brushCursor.style.transform = `translate(-50%,-50%) rotate(${angle}rad)`;
+  elements.brushCursor.classList.toggle('is-flat', state.brushType === 'marker' || state.tool === 'highlighter');
+  elements.brushCursor.hidden = false;
+}
+
+function brushOpacity(tool = state.tool, mode = state.brushType) {
+  const baseOpacity = tool === 'highlighter' ? .3 : mode === 'pencil' ? .62 : mode === 'marker' ? .88 : 1;
+  return baseOpacity * state.opacity;
+}
+
+function updateOpacityUI() {
+  elements.opacityValue.textContent = `${Math.round(state.opacity * 100)}%`;
+}
+
+function updateBrushPreview() {
+  const diameter = Math.max(3, Math.min(18, state.size * 1.25));
+  elements.brushPreview.style.width = `${diameter}px`;
+  elements.brushPreview.style.height = `${diameter}px`;
+  elements.brushPreview.style.backgroundColor = state.color;
+  elements.brushPreview.style.opacity = String(brushOpacity());
+  elements.brushPreview.classList.toggle('is-flat', state.brushType === 'marker' || state.tool === 'highlighter');
 }
 
 function updateSizeUI() {
   elements.sizeValue.textContent = `${Number.isInteger(state.size) ? state.size : state.size.toFixed(1)} pt`;
+  updateBrushPreview();
 }
 
 function pushHistory(action) {
@@ -985,11 +1040,26 @@ function snapShapeEnd(start, end, type, force, width, height) {
 function addPoint(stroke, point, force = false) {
   const points = stroke.points;
   const previous = points[points.length - 1];
-  if (previous && !force) {
+  const next = {
+    x: point.x, y: point.y, pressure: point.pressure,
+    tiltX: point.tiltX, tiltY: point.tiltY,
+    altitudeAngle: point.altitudeAngle, azimuthAngle: point.azimuthAngle,
+    time: point.time,
+  };
+  if (previous) {
     const rect = state.pointerRect || elements.liveCanvas.getBoundingClientRect();
-    if (Math.hypot((point.x - previous.x) * rect.width, (point.y - previous.y) * rect.height) < .65) return;
+    const distance = Math.hypot((point.x - previous.x) * rect.width, (point.y - previous.y) * rect.height);
+    if (distance < .72) {
+      previous.pressure = previous.pressure * .72 + point.pressure * .28;
+      previous.tiltX = point.tiltX;
+      previous.tiltY = point.tiltY;
+      previous.altitudeAngle = point.altitudeAngle;
+      previous.azimuthAngle = point.azimuthAngle;
+      previous.time = point.time;
+      if (!force || distance < .16) return;
+    }
   }
-  points.push({ x: point.x, y: point.y, pressure: point.pressure, time: point.time });
+  points.push(next);
 }
 
 function cancelCurrentStroke() {
@@ -1038,16 +1108,26 @@ async function endPinch() {
 function handlePointerDown(event) {
   if (!state.document || !renderer.pageViewport || state.imageGesture) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
+  if (event.pointerType === 'touch' && state.activePointerId !== null && state.pointerTool !== 'hand') return;
   if (event.pointerType === 'touch') {
     state.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    try { elements.liveCanvas.setPointerCapture(event.pointerId); } catch (_) { /* optional capture */ }
     if (state.touchPoints.size >= 2) {
       event.preventDefault();
       beginPinch();
       return;
     }
+    event.preventDefault();
+    state.activePointerId = event.pointerId;
+    state.pointerTool = 'hand';
+    state.pointerRect = elements.liveCanvas.getBoundingClientRect();
+    state.activePan = { x: event.clientX, y: event.clientY, left: elements.viewerScroll.scrollLeft, top: elements.viewerScroll.scrollTop };
+    elements.paper.classList.add('is-panning');
+    return;
   }
   if (state.pinch || state.suppressedPointers.has(event.pointerId)) return;
   event.preventDefault();
+  elements.brushCursor.hidden = true;
   state.activePointerId = event.pointerId;
   state.pointerTool = state.tool;
   try { elements.liveCanvas.setPointerCapture(event.pointerId); } catch (_) { /* capture is optional on older browsers */ }
@@ -1073,11 +1153,12 @@ function handlePointerDown(event) {
   }
   if (state.tool === 'shape') {
     state.activeStroke = {
-      id: randomId(), tool: 'pen', color: state.color, size: state.size,
+      id: randomId(), tool: 'pen', mode: 'ink', color: state.color, size: state.size, opacity: state.opacity,
       shape: { type: state.shapeType, start: { x: point.x, y: point.y }, end: { x: point.x, y: point.y } },
     };
   } else {
-    state.activeStroke = { id: randomId(), tool: state.tool, color: state.color, size: state.size, points: [] };
+    const mode = state.tool === 'pen' ? state.brushType : state.tool;
+    state.activeStroke = { id: randomId(), tool: state.tool, mode, color: state.color, size: state.size, opacity: brushOpacity(state.tool, mode), points: [] };
     addPoint(state.activeStroke, point, true);
   }
   state.predictedPoints = [];
@@ -1085,6 +1166,7 @@ function handlePointerDown(event) {
 }
 
 function handlePointerMove(event) {
+  if (event.pointerType === 'pen' && state.activePointerId === null) updateBrushCursor(event);
   if (event.pointerType === 'touch' && state.touchPoints.has(event.pointerId)) {
     state.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (state.pinch) { event.preventDefault(); updatePinch(); return; }
@@ -1113,9 +1195,8 @@ function handlePointerMove(event) {
     try { coalesced = event.getCoalescedEvents?.() || []; } catch (_) { /* older input APIs may not expose coalesced points */ }
     if (coalesced.length) {
       for (const sample of coalesced) addPoint(state.activeStroke, renderer.normalizedPoint(sample, state.pointerRect));
-    } else {
-      addPoint(state.activeStroke, point);
     }
+    addPoint(state.activeStroke, point);
     state.predictedPoints = [];
     let predicted = [];
     try { predicted = event.getPredictedEvents?.() || []; } catch (_) { /* predicted samples are optional */ }
@@ -1165,7 +1246,7 @@ function finishPointer(event, cancelled = false) {
       if (Math.hypot(dx, dy) >= 4) addStroke(stroke);
       else renderer.clearLive();
     } else {
-      addPoint(stroke, point, true);
+      addPoint(stroke, point);
       addStroke(stroke);
     }
   } else {
@@ -1185,8 +1266,8 @@ async function changeZoom(factor) {
 }
 
 function togglePanel(force) {
-  const isMobile = window.matchMedia('(max-width: 1020px)').matches;
-  if (isMobile) {
+  const usesOverlay = window.matchMedia('(max-width: 1366px)').matches;
+  if (usesOverlay) {
     const open = typeof force === 'boolean' ? force : !elements.notesPanel.classList.contains('is-open');
     elements.notesPanel.classList.toggle('is-open', open);
     elements.mobileScrim.hidden = !(open || elements.sidebar.classList.contains('is-open'));
@@ -1340,6 +1421,7 @@ function addEventListeners() {
   }, { passive: false });
 
   for (const button of elements.toolButtons) button.addEventListener('click', () => setTool(button.dataset.tool));
+  elements.brushType.addEventListener('change', () => { state.brushType = elements.brushType.value; updateBrushPreview(); });
   elements.shapeKind.addEventListener('change', () => { state.shapeType = elements.shapeKind.value; });
   for (const button of elements.colorButtons) button.addEventListener('click', () => setColor(button.dataset.color));
   elements.customColor.addEventListener('input', () => setColor(elements.customColor.value));
@@ -1347,13 +1429,24 @@ function addEventListeners() {
     state.size = Number(elements.sizeRange.value);
     updateSizeUI();
   });
+  elements.opacityRange.addEventListener('input', () => {
+    state.opacity = Number(elements.opacityRange.value) / 100;
+    updateOpacityUI();
+    updateBrushPreview();
+  });
   elements.undoButton.addEventListener('click', undo);
   elements.redoButton.addEventListener('click', redo);
 
   elements.liveCanvas.addEventListener('pointerdown', handlePointerDown);
   elements.liveCanvas.addEventListener('pointermove', handlePointerMove);
-  elements.liveCanvas.addEventListener('pointerup', (event) => finishPointer(event));
+  elements.liveCanvas.addEventListener('pointerup', (event) => {
+    finishPointer(event);
+    if (event.pointerType === 'pen') updateBrushCursor(event);
+  });
   elements.liveCanvas.addEventListener('pointercancel', (event) => finishPointer(event, true));
+  elements.liveCanvas.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'pen' && state.activePointerId === null) elements.brushCursor.hidden = true;
+  });
   elements.liveCanvas.addEventListener('lostpointercapture', (event) => {
     if (state.activePointerId === event.pointerId) finishPointer(event, true);
   });
@@ -1455,7 +1548,9 @@ async function initialize() {
   setTool('pen');
   setColor(state.color);
   state.size = Number(elements.sizeRange.value);
+  state.opacity = Number(elements.opacityRange.value) / 100;
   updateSizeUI();
+  updateOpacityUI();
   updatePageUI();
   updateZoomUI();
   try {

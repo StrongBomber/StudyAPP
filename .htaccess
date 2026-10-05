@@ -44,7 +44,7 @@ DirectoryIndex index.html index.php
 
 # Uygulama kabuğu ve kendi modülleri yeni sürümde önbellekten eski kalmasın.
 <IfModule mod_headers.c>
-  <FilesMatch "^(index\.html|styles\.css|app\.js|export\.js|renderer\.js|storage\.js)$">
+  <FilesMatch "^(index\.html|styles\.css|app\.js|export\.js|renderer\.js|storage\.js|stroke\.js)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"

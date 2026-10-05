@@ -1,24 +1,46 @@
 import * as pdfjs from '../vendor/pdf.min.mjs';
+import { createStrokeOutline } from './stroke.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const imageCache = new Map();
 
-function isCancellation(error) {
-  return error?.name === 'RenderingCancelledException' || /cancelled/i.test(error?.message || '');
-}
-
 function pointOf(point, width, height) {
   return { x: point.x * width, y: point.y * height };
 }
 
-function pressureScale(stroke, pressure) {
-  const value = Number.isFinite(pressure) ? pressure : .5;
-  if (stroke.mode === 'pencil') return .42 + value * .82;
-  if (stroke.mode === 'fountain') return .28 + value * 1.52;
-  if (stroke.mode === 'ink') return .48 + value * .88;
-  return .35 + value * 1.3;
+function isCancellation(error) {
+  return error?.name === 'RenderingCancelledException' || /cancelled/i.test(error?.message || '');
+}
+
+function drawPencilGrain(ctx, outline, stroke) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const point of outline) {
+    minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y);
+  }
+  const area = Math.max(1, (maxX - minX) * (maxY - minY));
+  const count = Math.max(18, Math.min(700, Math.round(area * .09)));
+  let seed = 2166136261;
+  for (const character of String(stroke.id || 'pencil')) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619) >>> 0;
+  const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(outline[0].x, outline[0].y);
+  for (let index = 1; index < outline.length; index += 1) ctx.lineTo(outline[index].x, outline[index].y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.globalAlpha = .13;
+  ctx.fillStyle = stroke.color || '#20283b';
+  for (let index = 0; index < count; index += 1) {
+    const x = minX + random() * (maxX - minX);
+    const y = minY + random() * (maxY - minY);
+    const size = .35 + random() * .8;
+    ctx.fillRect(x, y, size, size * (.6 + random() * .8));
+  }
+  ctx.restore();
 }
 
 function drawArrowHead(ctx, from, to, size) {
@@ -41,8 +63,6 @@ export class PdfRenderer {
     this.inkCanvas = inkCanvas;
     this.liveCanvas = liveCanvas;
     this.predictedCanvas = predictedCanvas;
-    this.liveStrokeId = null;
-    this.livePointCount = 0;
     this.imageCache = imageCache;
     this.onImageLoaded = null;
     this.pdfDocument = null;
@@ -189,10 +209,23 @@ export class PdfRenderer {
   }
 
   normalizedPoint(event, rect = this.liveCanvas.getBoundingClientRect()) {
+    const tiltX = Number.isFinite(event.tiltX) ? event.tiltX : 0;
+    const tiltY = Number.isFinite(event.tiltY) ? event.tiltY : 0;
+    const tiltMagnitude = Math.min(90, Math.hypot(tiltX, tiltY));
+    const altitudeAngle = Number.isFinite(event.altitudeAngle)
+      ? event.altitudeAngle
+      : (90 - tiltMagnitude) * Math.PI / 180;
+    const azimuthAngle = Number.isFinite(event.azimuthAngle)
+      ? event.azimuthAngle
+      : Math.atan2(tiltY, tiltX);
+    const pressure = Number.isFinite(event.pressure) && event.pressure > 0
+      ? event.pressure
+      : event.pointerType === 'mouse' ? .5 : event.buttons ? .28 : .45;
     return {
       x: clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1),
       y: clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1),
-      pressure: clamp(event.pressure || (event.pointerType === 'mouse' ? 0.5 : 0.55), 0.08, 1),
+      pressure: clamp(pressure, .08, 1),
+      tiltX, tiltY, altitudeAngle, azimuthAngle,
       time: Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now(),
     };
   }
@@ -209,55 +242,9 @@ export class PdfRenderer {
     const ctx = this.liveCanvas.getContext('2d');
     const width = this.pageViewport?.width || 0;
     const height = this.pageViewport?.height || 0;
-    if (!stroke || !width || !height) { this.clearLive(); return; }
-    if (stroke.shape) {
-      if (this.liveStrokeId !== stroke.id) {
-        ctx.clearRect(0, 0, width, height);
-        this.liveStrokeId = stroke.id;
-      } else {
-        ctx.clearRect(0, 0, width, height);
-      }
-      this.drawStroke(ctx, stroke, width, height);
-      return;
-    }
-    const points = stroke.points || [];
-    if (!points.length) return;
-    if (this.liveStrokeId !== stroke.id || points.length < this.livePointCount) {
-      ctx.clearRect(0, 0, width, height);
-      this.liveStrokeId = stroke.id;
-      this.livePointCount = 0;
-    }
-    const scale = this.pageViewport.scale || 1;
-    const highlighter = stroke.tool === 'highlighter';
-    const baseSize = Math.max(.55, (Number(stroke.size) || 2) * scale * (highlighter ? 3.25 : 1));
-    ctx.save();
-    ctx.globalAlpha = Number.isFinite(stroke.opacity) ? stroke.opacity : (highlighter ? .28 : 1);
-    ctx.globalCompositeOperation = highlighter || stroke.mode === 'pencil' ? 'multiply' : 'source-over';
-    ctx.strokeStyle = stroke.color || '#3449d8';
-    ctx.fillStyle = stroke.color || '#3449d8';
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    if (!this.livePointCount) {
-      const first = points[0];
-      const p = pointOf(first, width, height);
-      const pressureWidth = stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, first.pressure);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, baseSize * pressureWidth / 2, 0, Math.PI * 2);
-      ctx.fill();
-      this.livePointCount = 1;
-    }
-    for (let i = this.livePointCount; i < points.length; i += 1) {
-      const a = pointOf(points[i - 1], width, height);
-      const b = pointOf(points[i], width, height);
-      const pressure = ((points[i - 1].pressure || .5) + (points[i].pressure || .5)) / 2;
-      ctx.lineWidth = baseSize * (stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, pressure));
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-    this.livePointCount = points.length;
-    ctx.restore();
+    ctx.clearRect(0, 0, width, height);
+    if (!stroke || !width || !height) return;
+    this.drawStroke(ctx, stroke, width, height);
   }
 
   drawPredicted(stroke, predictedPoints = []) {
@@ -275,8 +262,6 @@ export class PdfRenderer {
     const height = this.pageViewport?.height || 0;
     this.liveCanvas.getContext('2d').clearRect(0, 0, width, height);
     this.predictedCanvas.getContext('2d').clearRect(0, 0, width, height);
-    this.liveStrokeId = null;
-    this.livePointCount = 0;
   }
 
   drawStroke(ctx, stroke, width, height) {
@@ -301,39 +286,31 @@ export class PdfRenderer {
       }
       return;
     }
+
     const scale = this.pageViewport?.scale || 1;
     const highlighter = stroke.tool === 'highlighter';
-    const size = Math.max(0.55, (Number(stroke.size) || 2) * scale * (highlighter ? 3.25 : 1));
     ctx.save();
-    ctx.globalAlpha = Number.isFinite(stroke.opacity) ? stroke.opacity : (highlighter ? .28 : 1);
+    ctx.globalAlpha = Number.isFinite(stroke.opacity)
+      ? stroke.opacity
+      : highlighter ? .3 : stroke.mode === 'pencil' ? .62 : stroke.mode === 'marker' ? .88 : 1;
     ctx.globalCompositeOperation = highlighter || stroke.mode === 'pencil' ? 'multiply' : 'source-over';
-    ctx.strokeStyle = stroke.color || '#3449d8';
-    ctx.fillStyle = stroke.color || '#3449d8';
-    ctx.lineWidth = size;
+    ctx.fillStyle = stroke.color || '#20283b';
+    ctx.strokeStyle = ctx.fillStyle;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
     if (stroke.shape) {
+      ctx.lineWidth = Math.max(.65, (Number(stroke.size) || 2) * scale);
       this.drawShape(ctx, stroke.shape, width, height);
     } else {
-      const points = stroke.points || [];
-      if (!points.length) { ctx.restore(); return; }
-      if (points.length === 1) {
-        const p = pointOf(points[0], width, height);
-        const pressureWidth = stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, points[0].pressure);
+      const outline = createStrokeOutline(stroke, width, height, scale);
+      if (outline.length >= 3) {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, size * pressureWidth / 2, 0, Math.PI * 2);
+        ctx.moveTo(outline[0].x, outline[0].y);
+        for (let index = 1; index < outline.length; index += 1) ctx.lineTo(outline[index].x, outline[index].y);
+        ctx.closePath();
         ctx.fill();
-      } else {
-        for (let i = 1; i < points.length; i += 1) {
-          const from = pointOf(points[i - 1], width, height);
-          const to = pointOf(points[i], width, height);
-          const pressure = ((points[i - 1].pressure || .5) + (points[i].pressure || .5)) / 2;
-          ctx.lineWidth = size * (stroke.tool === 'highlighter' ? 1 : pressureScale(stroke, pressure));
-          ctx.beginPath();
-          ctx.moveTo(from.x, from.y);
-          ctx.lineTo(to.x, to.y);
-          ctx.stroke();
-        }
+        if (stroke.mode === 'pencil') drawPencilGrain(ctx, outline, stroke);
       }
     }
     ctx.restore();

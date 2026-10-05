@@ -1,14 +1,17 @@
 # Çözüm — PDF çalışma alanı
 
-PDF soru bankalarını ve ders notlarını tarayıcıda açıp çalışmak için hazırlanmış, **tamamen istemci tarafında çalışan** bir çalışma alanı. Kalemle veya fosforlu kalemle işaretle; şekil çiz; her sayfaya ayrı not al; ilerlemeni takip et ve işaretlemelerini PDF'e ekleyerek indir. Sunucu, hesap, veritabanı hizmeti veya API anahtarı gerekmez.
+PDF soru bankaları ve ders notları üzerinde çalışmak için hazırlanmış, **iPadOS Safari ve Apple Pencil odaklı**, tamamen tarayıcıda çalışan bir çalışma alanı. Apple Pencil ile basınca duyarlı çiz; parmakla sayfayı taşı ve iki parmakla yakınlaştır. Veriler iPad'de kalır; sunucu, hesap, API veya API anahtarı gerekmez.
 
 ## Neler yapabilirsin?
 
 - PDF açmak, sürükleyip bırakmak ve örnek belgeyle başlamak
 - Sayfalar arasında gezinmek, sayfaya sığdırmak ve yakınlaştırmak
-- Kalem, fosforlu kalem, silgi, el/taşıma ve vektörel çizgi, ok, dikdörtgen, elips ve üçgen araçları
+- Mürekkep, dolma kalem, kurşun kalem, keçeli kalem ve fosforlu kalem uçları
+- Apple Pencil basınç ve eğim bilgisini kullanmak; akıcı çizgi için birleştirilmiş ve tahmin edilen Pencil örneklerinden yararlanmak
+- Silgi, sayfayı taşıma ve vektörel çizgi, ok, dikdörtgen, elips ve üçgen araçları
+- Parmakla sayfayı kaydırmak; iki parmakla yakınlaştırmak (parmakla çizim kapalı)
+- Renk, kalınlık ve opaklığı ayrı ayarlamak; Pencil gezinmesini destekleyen iPad'lerde uç önizlemesi görmek
 - Sayfaya görsel eklemek, sürükleyerek taşımak ve köşeden boyutlandırmak
-- Renk ve kalınlık seçmek; desteklenen kalemlerde basınç verisini kullanmak
 - Geri al / yinele ve klavye kısayolları
 - Her sayfaya bağlı not yazmak ve sayfaları tamamlandı olarak işaretlemek
 - Çizim ve şekilleri yeni PDF'e gömerek indirmek
@@ -42,6 +45,7 @@ src/
   export.js
   renderer.js
   storage.js
+  stroke.js
 vendor/
   pdf.min.mjs
   pdf.worker.min.mjs
@@ -56,9 +60,10 @@ Ayrıntılı kurulum ve kontrol listesi: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFIN
 - `index.html` — erişilebilir uygulama iskeleti
 - `styles.css` — duyarlı, mobil uyumlu arayüz
 - `src/app.js` — etkileşimler, araçlar, otomatik kayıt ve sayfa ilerlemesi
-- `src/renderer.js` — PDF.js sayfa çizimi ve kanvas katmanları
+- `src/renderer.js` — PDF.js sayfa çizimi, Apple Pencil girişi ve kanvas katmanları
+- `src/stroke.js` — basınç/eğim duyarlı yumuşatılmış fırça geometrisi
 - `src/storage.js` — IndexedDB tabanlı yerel çalışma alanı
-- `src/export.js` — pdf-lib ile vektörel işaretleme ve indirme
+- `src/export.js` — aynı fırça geometrisini pdf-lib ile vektörel dışa aktarma
 - `vendor/` — yerel PDF.js ve pdf-lib dosyaları; derleme/harici CDN gerekmez
 - `assets/demo.pdf` — örnek belge
 

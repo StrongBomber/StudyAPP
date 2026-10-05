@@ -1,6 +1,6 @@
 # InfinityFree'ye Yayınlama Kılavuzu
 
-Çözüm statik bir web uygulamasıdır. Uygulama kurulumu, PDF.js ile PDF çizimi, IndexedDB kayıtları ve PDF dışa aktarma tarayıcıda gerçekleşir; PHP, sunucu veritabanı, API anahtarı veya derleme adımı gerekmez.
+Çözüm iPadOS Safari ve Apple Pencil için tasarlanmış statik bir web uygulamasıdır. Pencil basınç/eğim verisi, çizim, IndexedDB kayıtları ve PDF dışa aktarma tarayıcıda gerçekleşir; PHP, sunucu veritabanı, API anahtarı veya derleme adımı gerekmez.
 
 ## 1. Dosyaları yükleme
 
@@ -18,7 +18,8 @@ htdocs/
 │   ├── app.js
 │   ├── export.js
 │   ├── renderer.js
-│   └── storage.js
+│   ├── storage.js
+│   └── stroke.js
 └── vendor/
     ├── pdf.min.mjs
     ├── pdf.worker.min.mjs
@@ -42,7 +43,9 @@ Sertifika kurulmadan önce yönlendirme sorun çıkarırsa `.htaccess` içindeki
 - [ ] PDF.js dosyaları yükleniyor (`vendor/pdf.min.mjs` ve `vendor/pdf.worker.min.mjs`)
 - [ ] **Örnek belgeyle dene** çalışıyor
 - [ ] Kendi PDF'in açılıyor ve sayfalar arasında geçiliyor
-- [ ] Kalem, fosforlu kalem, silgi ve şekiller çalışıyor
+- [ ] Apple Pencil 2 ile farklı basınçta ince/kalın çizgi; eğimle dolma ve kurşun kalem davranışı
+- [ ] Fırça türleri, renk/kalınlık/opaklık ayarı, silgi ve şekiller çalışıyor
+- [ ] Parmak çizim yapmıyor; sayfayı kaydırıyor ve iki parmakla yakınlaştırıyor
 - [ ] PNG/JPEG/WebP/GIF/BMP görsel ekleme, taşıma ve boyutlandırma çalışıyor
 - [ ] Yenileyince son belge, görseller ve çizimler geri geliyor
 - [ ] **PDF indir** işaretlemeleri PDF'e ekliyor
