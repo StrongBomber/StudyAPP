@@ -351,7 +351,7 @@ el.inkCanvas.addEventListener('pointerdown',event=>{
   if(currentTool==='eraser'){snapshotForUndo();eraseAt(event);return;}
   snapshotForUndo();const r=el.inkCanvas.getBoundingClientRect();currentStrokeRect=r;const point=normalizedPoint(event,r);const high=currentTool==='highlighter'||penMode==='highlighter';
   const mode=high?'highlighter':penMode;const opacity=high?0.28:mode==='pencil'?0.56:1;currentStroke={color:currentColor,width:(high?penWidth*2.35:penWidth*(mode==='fountain'?1.08:1))/r.width,opacity,tool:currentTool,mode,points:[point]};strokeStabilizerFilter=createStrokeFilter(point,event,r);
-  getStrokes().push(currentStroke);drawLiveInk();
+  getStrokes().push(currentStroke);redrawLiveInk();
 },{passive:false});
 el.inkCanvas.addEventListener('pointermove',event=>{
   if(!activePointer||activePointer.id!==event.pointerId)return;
@@ -383,7 +383,7 @@ async function renderCurrentPage(){if(!pdfDoc)return;const version=++renderVersi
     for(const canvas of [el.inkCanvas,el.liveCanvas]){canvas.width=Math.round(w*inkDpr);canvas.height=Math.round(h*inkDpr);canvas.style.width=w+'px';canvas.style.height=h+'px';}
     const context=el.pdfCanvas.getContext('2d',{alpha:false});context.setTransform(1,0,0,1,0,0);context.fillStyle='#fff';context.fillRect(0,0,el.pdfCanvas.width,el.pdfCanvas.height);
     const task=page.render({canvasContext:context,viewport,transform:[dpr,0,0,dpr,0,0]});renderTask=task;await task.promise;if(version!==renderVersion)return;renderTask=null;
-    el.wait.style.display='none';el.paper.style.visibility='visible';redrawInk();updateCropFocusMask();if(currentTool==='crop'&&cropSelection)updateCropOverlay();updatePageControls();updateZoomLabel();updateUndoButtons();updateAiUi();
+    el.wait.style.display='none';el.paper.style.visibility='visible';redrawInk();updateCropFocusMask();if(currentTool==='crop'&&cropSelection)updateCropOverlay();updatePageControls();updateZoomLabel();updateUndoButtons();
   }catch(error){if(error?.name==='RenderingCancelledException')return;console.error(error);el.wait.innerHTML='<span>PDF sayfası görüntülenemedi. Dosyanın geçerli bir PDF olduğundan emin ol.</span>';el.wait.style.display='flex';}
 }
 function updatePageControls(){if(!pdfDoc)return;el.pageNumber.value=String(currentPage);el.pageNumber.max=String(pdfDoc.numPages);el.pageNumber.setAttribute('aria-label',`Sayfa numarası, toplam ${pdfDoc.numPages} sayfa`);el.pageNumber.style.width=`${Math.max(38,String(pdfDoc.numPages).length*9+17)}px`;el.totalPages.textContent=String(pdfDoc.numPages).padStart(2,'0');$('#prevPage').disabled=currentPage<=1;$('#nextPage').disabled=currentPage>=pdfDoc.numPages;el.notePage.textContent='Sayfa '+String(currentPage).padStart(2,'0');$$('.page-thumb').forEach(b=>b.classList.toggle('selected',Number(b.dataset.page)===currentPage));}
