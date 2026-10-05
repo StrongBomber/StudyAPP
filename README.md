@@ -1,55 +1,87 @@
 # Çözüm — PDF çalışma alanı
 
-PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış, **tamamen istemci tarafında çalışan** bir çalışma alanı. Sunucu, veritabanı veya API anahtarı gerektirmez; tek bir `index.html` ve `vendor/` klasörüyle her statik barındırmada (InfinityFree dahil) çalışır.
+PDF soru bankalarını ve ders notlarını tarayıcıda açıp çalışmak için hazırlanmış, **tamamen istemci tarafında çalışan** bir çalışma alanı. Kalemle veya fosforlu kalemle işaretle; şekil çiz; her sayfaya ayrı not al; ilerlemeni takip et ve işaretlemelerini PDF'e ekleyerek indir. Sunucu, hesap, veritabanı hizmeti veya API anahtarı gerekmez.
 
-## Özellikler
+## Neler yapabilirsin?
 
-- PDF içe aktarma, sayfalar arasında gezinme ve yazılan sayfa numarasına atlama
-- PDF üzerine çizim; işaretlemeleri PDF'e gömerek dışa aktarma
-- Dört yazım modu: **Mürekkep**, **Kurşun**, **Fosforlu** ve **Dolma kalem**
-- **Şekil aracı**: çizgi, ok, dikdörtgen, daire, elips, üçgen — sürükleyerek çizim
-- **Fotoğraf ekleme**: taşıma, köşeden boyutlandırma; dışa aktarmada PDF'e gömülür
-- Kalem kalınlığı ve çizgi sabitleme ayarları; desteklenen cihazlarda stylus basıncı
-- Geri al/yinele, yakınlaştırma/taşıma, soru alanına odaklanma (kırpma odağı)
-- Notların, çizimlerin ve soru durumlarının tarayıcıda IndexedDB ile saklanması
-- Örnek çalışma PDF'i: `assets/demo.pdf`
+- PDF açmak, sürükleyip bırakmak ve örnek belgeyle başlamak
+- Sayfalar arasında gezinmek, sayfaya sığdırmak ve yakınlaştırmak
+- Kalem, fosforlu kalem, silgi, el/taşıma ve vektörel çizgi, ok, dikdörtgen, elips ve üçgen araçları
+- Sayfaya görsel eklemek, sürükleyerek taşımak ve köşeden boyutlandırmak
+- Renk ve kalınlık seçmek; desteklenen kalemlerde basınç verisini kullanmak
+- Geri al / yinele ve klavye kısayolları
+- Her sayfaya bağlı not yazmak ve sayfaları tamamlandı olarak işaretlemek
+- Çizim ve şekilleri yeni PDF'e gömerek indirmek
+- En son açılan belgeyi, sayfayı ve ilerlemeyi otomatik geri yüklemek
 
-PDF.js ve pdf-lib dosyaları `vendor/` altında depolanır; derleme adımı gerekmez.
+PDF'ler, çizimler, eklenen görseller ve notlar **tarayıcının IndexedDB alanında bu cihazda** saklanır. Dışarıya PDF veya not gönderen bir API ya da üçüncü taraf analitik yoktur. Tarayıcı verisini temizlemek veya belgeyi kenar çubuğundan kaldırmak kayıtları siler. Eski Çözüm sürümündeki yerel PDF, çizim ve notlar ilk açılışta yeni çalışma alanına aktarılır; kaynak kayıtlar aktarım sırasında silinmez.
 
-## InfinityFree'ye yükleme (özet)
+## Yerelde çalıştırma
 
-1. Bu depodaki **tüm dosyaları** `htdocs/` klasörüne yükleyin (`.htaccess` dahil — FTP istemcinizde gizli dosyaları göstermeyi açın).
-2. InfinityFree panelinden **ücretsiz SSL** kurun.
-3. Siteyi açın — başka hiçbir yapılandırma gerekmez.
-
-Adım adım kurulum için: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFINITYFREE.md)
-
-## Yerelde deneme
-
-Herhangi bir statik sunucu yeterlidir, örneğin:
+Bir statik HTTP sunucusu yeterlidir; derleme adımı yoktur:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-`http://127.0.0.1:8000` adresinde arayüz açılır.
+Ardından `http://127.0.0.1:8000` adresini aç. PDF.js ES modülü ve worker'ı `.mjs` MIME türüyle sunulmalıdır; `file://` yerine HTTP/HTTPS kullan.
 
-## Depo yapısı
+## InfinityFree'ye yükleme
+
+Aşağıdaki dosya ve klasörleri `htdocs/` içine, yapısını bozmadan yükle:
 
 ```text
-.
-├── index.html                 # Web uygulaması (tek dosya)
-├── .htaccess                  # HTTPS, MIME, dosya koruması
-├── assets/demo.pdf            # Örnek PDF
-├── vendor/                    # PDF.js, pdf-lib ve lisansları
-└── DEPLOY_INFINITYFREE.md     # Kurulum kılavuzu
+index.html
+styles.css
+.htaccess
+assets/
+  demo.pdf
+  favicon.svg
+src/
+  app.js
+  export.js
+  renderer.js
+  storage.js
+vendor/
+  pdf.min.mjs
+  pdf.worker.min.mjs
+  pdf-lib.min.js
+  *LICENSE*.txt
 ```
 
-## Güvenlik ve gizlilik
+Ayrıntılı kurulum ve kontrol listesi: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFINITYFREE.md).
 
-- PDF'ler, çizimler ve notlar hiçbir sunucuya gönderilmez; yalnızca tarayıcının IndexedDB deposunda saklanır.
-- Uygulama dışarıya hiçbir ağ isteği yapmaz (tüm kütüphaneler `vendor/` altından yüklenir).
+## Proje yapısı
 
-## Lisans
+- `index.html` — erişilebilir uygulama iskeleti
+- `styles.css` — duyarlı, mobil uyumlu arayüz
+- `src/app.js` — etkileşimler, araçlar, otomatik kayıt ve sayfa ilerlemesi
+- `src/renderer.js` — PDF.js sayfa çizimi ve kanvas katmanları
+- `src/storage.js` — IndexedDB tabanlı yerel çalışma alanı
+- `src/export.js` — pdf-lib ile vektörel işaretleme ve indirme
+- `vendor/` — yerel PDF.js ve pdf-lib dosyaları; derleme/harici CDN gerekmez
+- `assets/demo.pdf` — örnek belge
 
-Uygulamanın kendi kaynak kodu için ayrı bir lisans seçilmemiştir. `vendor/` altındaki üçüncü taraf bileşenlerin lisans bilgileri ilgili lisans dosyalarında ve [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) içinde yer alır.
+## Kısayollar
+
+| Kısayol | İşlev |
+|---|---|
+| `⌘/Ctrl + O` | PDF aç |
+| `⌘/Ctrl + Z` | Geri al |
+| `⌘/Ctrl + Shift + Z` veya `⌘/Ctrl + Y` | Yinele |
+| `P` / `H` / `E` / `S` | Kalem / fosforlu / silgi / şekil |
+| `Space` basılı tut | Sayfayı taşı |
+| `←` / `→` | Önceki / sonraki sayfa |
+| `Ctrl + kaydırma` | Yakınlaştır / uzaklaştır |
+
+## Doğrulama
+
+Kaynak dosyalarının sözdizimini kontrol etmek için:
+
+```bash
+for file in src/*.js; do node --check "$file"; done
+```
+
+## Üçüncü taraf lisansları
+
+PDF.js ve pdf-lib lisansları `vendor/` altındaki lisans dosyalarında ve [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) içinde yer alır.

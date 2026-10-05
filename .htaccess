@@ -16,6 +16,7 @@ DirectoryIndex index.html index.php
 # PDF.js ES modülleri (.mjs) doğru türle sunulmalı.
 <IfModule mod_mime.c>
   AddType text/javascript .mjs
+  AddType application/javascript .js
   AddType application/pdf .pdf
 </IfModule>
 
@@ -39,4 +40,15 @@ DirectoryIndex index.html index.php
   ExpiresByType text/css "access plus 30 days"
   ExpiresByType application/pdf "access plus 7 days"
   ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+# Uygulama kabuğu ve kendi modülleri yeni sürümde önbellekten eski kalmasın.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|styles\.css|app\.js|export\.js|renderer\.js|storage\.js)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
