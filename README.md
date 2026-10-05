@@ -1,6 +1,6 @@
 # Çözüm — PDF çalışma alanı
 
-PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış, **InfinityFree üzerinde çalışacak şekilde yapılandırılmış** bir çalışma alanı. PDF görüntüleme, işaretleme, şekil ve fotoğraf ekleme tamamen istemci tarafında çalışır; yapay zekâ asistanı ise anahtarı tarayıcıya vermeden PHP proxy'si (`api/nvidia.php`) üzerinden NVIDIA NIM'e bağlanır.
+PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış, **tamamen istemci tarafında çalışan** bir çalışma alanı. Sunucu, veritabanı veya API anahtarı gerektirmez; tek bir `index.html` ve `vendor/` klasörüyle her statik barındırmada (InfinityFree dahil) çalışır.
 
 ## Özellikler
 
@@ -10,61 +10,45 @@ PDF soru bankalarını tarayıcıda açıp kalemle çözmek için hazırlanmış
 - **Şekil aracı**: çizgi, ok, dikdörtgen, daire, elips, üçgen — sürükleyerek çizim
 - **Fotoğraf ekleme**: taşıma, köşeden boyutlandırma; dışa aktarmada PDF'e gömülür
 - Kalem kalınlığı ve çizgi sabitleme ayarları; desteklenen cihazlarda stylus basıncı
-- Geri al/yinele, yakınlaştırma/taşıma, kırpma odağı ve görünümü sıfırlama
+- Geri al/yinele, yakınlaştırma/taşıma, soru alanına odaklanma (kırpma odağı)
 - Notların, çizimlerin ve soru durumlarının tarayıcıda IndexedDB ile saklanması
-- Kırpım seçmeden de açık PDF sayfasını bağlam olarak kullanabilen Türkçe ders asistanı
 - Örnek çalışma PDF'i: `assets/demo.pdf`
 
-PDF.js, pdf-lib ve KaTeX dosyaları `vendor/` altında depolanır; derleme adımı gerekmez.
+PDF.js ve pdf-lib dosyaları `vendor/` altında depolanır; derleme adımı gerekmez.
 
 ## InfinityFree'ye yükleme (özet)
 
 1. Bu depodaki **tüm dosyaları** `htdocs/` klasörüne yükleyin (`.htaccess` dahil — FTP istemcinizde gizli dosyaları göstermeyi açın).
 2. InfinityFree panelinden **ücretsiz SSL** kurun.
-3. Yapay zekâ için anahtar dosyanızı yükleyin: elinizde hazır `api/config.php` varsa onu `htdocs/api/` içine koymanız yeterlidir (tarayıcıdan erişilemez, `.htaccess` korur). Yoksa `api/config.sample.php`'yi kopyalayıp anahtarınızı girin.
-4. Kontrol: `https://alanadiniz.com/api/nvidia.php?route=diag&live=1`
+3. Siteyi açın — başka hiçbir yapılandırma gerekmez.
 
-Adım adım kurulum, teşhis ve sorun giderme için: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFINITYFREE.md)
-
-## Yapay zekâ anahtarı
-
-Asistan olmadan da uygulama tamamen çalışır. Asistan için NVIDIA NIM anahtarı (`https://build.nvidia.com`) gerekir:
-
-- **Önerilen:** `api/config.sample.php` kopyasını `htdocs`'un BİR ÜSTÜNDEKİ klasöre `nvidia-config.php` adıyla koyun (web'den erişilemez).
-- **Alternatif:** `htdocs/api/config.php` adıyla koyun (`.htaccess` doğrudan erişimi engeller).
-
-Gerçek anahtarı asla `index.html`'e, JavaScript'e, commit'lere veya herkese açık depoya koymayın. Anahtar yanlışlıkla paylaşıldıysa NVIDIA panelinden iptal edip yenisini oluşturun. Modeli değiştirmek için yapılandırma dosyasındaki `NVIDIA_MODEL` değerini düzenleyin; varsayılan `z-ai/glm-5.3-flash`'tir.
+Adım adım kurulum için: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFINITYFREE.md)
 
 ## Yerelde deneme
 
-PHP kuruluysa proje kökünde:
+Herhangi bir statik sunucu yeterlidir, örneğin:
 
 ```bash
-php -S 127.0.0.1:8000
+python3 -m http.server 8000
 ```
 
-`http://127.0.0.1:8000` adresinde arayüz açılır; AI uçları `api/nvidia.php?route=...` üzerinden çalışır (ön yüz bu adrese otomatik düşer). PHP olmadan herhangi bir statik sunucuyla da arayüzü deneyebilirsiniz; bu durumda yalnızca asistan devre dışı kalır.
+`http://127.0.0.1:8000` adresinde arayüz açılır.
 
 ## Depo yapısı
 
 ```text
 .
 ├── index.html                 # Web uygulaması (tek dosya)
-├── .htaccess                  # API yönlendirme, HTTPS, MIME, dosya koruması
-├── api/
-│   ├── nvidia.php             # NVIDIA NIM proxy'si (status/chat/test/diag)
-│   ├── .htaccess              # config dosyalarını koruma
-│   └── config.sample.php      # Anahtar yapılandırma şablonu
+├── .htaccess                  # HTTPS, MIME, dosya koruması
 ├── assets/demo.pdf            # Örnek PDF
-├── vendor/                    # PDF.js, pdf-lib, KaTeX ve lisansları
-└── DEPLOY_INFINITYFREE.md     # Kurulum ve sorun giderme kılavuzu
+├── vendor/                    # PDF.js, pdf-lib ve lisansları
+└── DEPLOY_INFINITYFREE.md     # Kurulum kılavuzu
 ```
 
 ## Güvenlik ve gizlilik
 
-- PDF'ler ve notlar sunucuya yüklenmez; tarayıcıda saklanır. Asistana gönderilen sohbet içeriği (ilk soruda açık sayfanın küçültülmüş görüntüsü dâhil) PHP proxy üzerinden NVIDIA servisine iletilir.
-- `api/nvidia.php` anahtarı asla tarayıcıya veya hata mesajlarına yansıtmaz.
-- Teşhis sayfası (`?route=diag`) anahtarın yalnızca var/yok bilgisini ve uzunluğunu raporlar.
+- PDF'ler, çizimler ve notlar hiçbir sunucuya gönderilmez; yalnızca tarayıcının IndexedDB deposunda saklanır.
+- Uygulama dışarıya hiçbir ağ isteği yapmaz (tüm kütüphaneler `vendor/` altından yüklenir).
 
 ## Lisans
 

@@ -1,12 +1,3 @@
-# API anahtarı içeren yerel yapılandırma dosyaları — ASLA commit etmeyin
-.env
-.env.*
-api/config.php
-nvidia-config.php
-
-# Sunucuda üretilen hata ayıklama günlüğü
-api/debug.log
-
 # Editör ve işletim sistemi dosyaları
 .DS_Store
 Thumbs.db
