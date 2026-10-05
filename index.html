@@ -244,7 +244,7 @@ let zoomFactor = 1; let renderTask = null; let renderVersion = 0; let saveTimer 
 let activePointer = null, currentStroke = null, dragOrigin = null, lastPenAt = 0, currentStrokeRect = null, strokeStabilizerFilter = null;
 let touchPointers=new Map(), touchGesture=null;
 let cropStart = null, cropSelection = null, selectedCropData = null, selectedCropPage = null, lastNonCropTool = 'pen', isCropFocus = false;
-let dpr = Math.min(window.devicePixelRatio || 1, 3), inkDpr = Math.min(window.devicePixelRatio || 1, 4);
+let dpr = Math.min(window.devicePixelRatio || 1, 2), inkDpr = Math.min(window.devicePixelRatio || 1, 3);
 let predictedPoints=[],predictedFor=null;
 try{el.liveCanvas.getContext('2d',{desynchronized:true});}catch(_){}
 
@@ -294,7 +294,7 @@ function redo(){if(!redoStack.length)return;undoStack.push(clone(getStrokes()));
 function setSaveDocMeta(name,id){documentName=name;documentId=id;el.title.textContent=name;el.crumb.textContent=id==='demo'?'KİTAPLIĞIM / MATEMATİK':'KİTAPLIĞIM / PDF';el.currentLabel.textContent=name;el.sideName.textContent=name.replace(/\s*[·|—-].*$/,'')||name;const sub=$('#currentFileRow .file-sub');if(sub)sub.textContent=id==='demo'?'Örnek PDF':'Cihazında · açık';}
 function normalizedPoint(event,rect){const r=rect||el.inkCanvas.getBoundingClientRect(),width=Math.max(1,r.width),height=Math.max(1,r.height);return{x:Math.max(0,Math.min(1,(event.clientX-r.left)/width)),y:Math.max(0,Math.min(1,(event.clientY-r.top)/height)),p:event.pointerType==='pen'?(event.pressure>0?Math.max(.2,Math.min(1,event.pressure)):0.65):1};}
 function effectivePointWidth(stroke,p){const pressure=p?.p??.7,mode=stroke.mode||'ink',base=stroke.width*el.inkCanvas.clientWidth;if(mode==='highlighter')return Math.max(.7,base);const factor=mode==='pencil'?.42+pressure*.82:mode==='fountain'?.28+pressure*1.52:.48+pressure*.88;return Math.max(.55,base*factor);}
-function applyStrokeStyle(ctx,stroke,w){const mode=stroke.mode||'ink';ctx.globalAlpha=stroke.opacity??1;ctx.strokeStyle=stroke.color;ctx.fillStyle=stroke.color;ctx.lineCap='round';ctx.lineJoin='round';ctx.globalCompositeOperation=mode==='highlighter'||mode==='pencil'?'multiply':'source-over';ctx.shadowColor=mode==='pencil'?stroke.color:'transparent';ctx.shadowBlur=mode==='pencil'?.35:0;}
+function applyStrokeStyle(ctx,stroke,w){const mode=stroke.mode||'ink';ctx.globalAlpha=stroke.opacity??1;ctx.strokeStyle=stroke.color;ctx.fillStyle=stroke.color;ctx.lineCap='round';ctx.lineJoin='round';ctx.globalCompositeOperation=mode==='highlighter'||mode==='pencil'?'multiply':'source-over';ctx.shadowColor='transparent';ctx.shadowBlur=0;}
 function drawStrokeDot(ctx,stroke,p,w,h){const radius=effectivePointWidth(stroke,p)/2;ctx.beginPath();ctx.arc(p.x*w,p.y*h,radius,0,Math.PI*2);ctx.fill();}
 function traceSmoothStroke(ctx,points,w,h){const first=points[0];ctx.moveTo(first.x*w,first.y*h);if(points.length===2){ctx.lineTo(points[1].x*w,points[1].y*h);return;}for(let i=0;i<points.length-1;i++){const p0=points[Math.max(0,i-1)],p1=points[i],p2=points[i+1],p3=points[Math.min(points.length-1,i+2)];ctx.bezierCurveTo((p1.x+(p2.x-p0.x)/6)*w,(p1.y+(p2.y-p0.y)/6)*h,(p2.x-(p3.x-p1.x)/6)*w,(p2.y-(p3.y-p1.y)/6)*h,p2.x*w,p2.y*h);}}
 function drawStrokeSegment(ctx,stroke,points,index,w,h){const p0=points[Math.max(0,index-1)],p1=points[index],p2=points[index+1],p3=points[Math.min(points.length-1,index+2)];ctx.beginPath();ctx.moveTo(p1.x*w,p1.y*h);ctx.bezierCurveTo((p1.x+(p2.x-p0.x)/6)*w,(p1.y+(p2.y-p0.y)/6)*h,(p2.x-(p3.x-p1.x)/6)*w,(p2.y-(p3.y-p1.y)/6)*h,p2.x*w,p2.y*h);ctx.lineWidth=(effectivePointWidth(stroke,p1)+effectivePointWidth(stroke,p2))/2;ctx.stroke();}
@@ -303,6 +303,9 @@ function drawStroke(ctx,stroke,w,h){if(stroke?.kind==='image'){drawImageItem(ctx
 function clearLiveInk(){const canvas=el.liveCanvas,w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;const ctx=canvas.getContext('2d');ctx.setTransform(inkDpr,0,0,inkDpr,0,0);ctx.clearRect(0,0,w,h);}
 function redrawLiveInk(){const canvas=el.liveCanvas,w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;const ctx=canvas.getContext('2d');ctx.setTransform(inkDpr,0,0,inkDpr,0,0);ctx.clearRect(0,0,w,h);if(!currentStroke)return;drawStroke(ctx,currentStroke,w,h);if(predictedFor===currentStroke&&predictedPoints.length&&currentStroke.points.length){const tail=currentStroke.points.slice(-2);drawStroke(ctx,{...currentStroke,tool:'pen',geom:null,shape:null,points:[...tail,...predictedPoints]},w,h);}}
 function commitStrokePreview(){if(!currentStroke)return;const canvas=el.inkCanvas,w=canvas.clientWidth,h=canvas.clientHeight;if(w&&h){const ctx=canvas.getContext('2d');ctx.setTransform(inkDpr,0,0,inkDpr,0,0);drawStroke(ctx,currentStroke,w,h);}clearLiveInk();}
+let inkRedrawQueued=false,liveRedrawQueued=false;
+function scheduleRedrawInk(){if(inkRedrawQueued)return;inkRedrawQueued=true;requestAnimationFrame(()=>{inkRedrawQueued=false;redrawInk();});}
+function scheduleRedrawLive(){if(liveRedrawQueued)return;liveRedrawQueued=true;requestAnimationFrame(()=>{liveRedrawQueued=false;redrawLiveInk();});}
 function redrawInk(){const canvas=el.inkCanvas,w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;const ctx=canvas.getContext('2d');ctx.setTransform(inkDpr,0,0,inkDpr,0,0);ctx.clearRect(0,0,w,h);if(currentStroke)currentStrokeRect=canvas.getBoundingClientRect();for(const stroke of getStrokes())if(stroke!==currentStroke)drawStroke(ctx,stroke,w,h);redrawLiveInk();updateImageOverlay();}
 function strokeEventTime(event){const time=Number(event?.timeStamp);return Number.isFinite(time)&&time>0?time:performance.now();}
 function createStrokeFilter(point,event,rect){const width=Math.max(1,rect?.width||el.inkCanvas.clientWidth),height=Math.max(1,rect?.height||el.inkCanvas.clientHeight);return{lastRawX:point.x*width,lastRawY:point.y*height,filteredX:point.x*width,filteredY:point.y*height,velocityX:0,velocityY:0,pressure:point.p,lastTime:strokeEventTime(event)};}
@@ -333,7 +336,7 @@ async function downscaleImageFile(file){const url=URL.createObjectURL(file);try{
 async function insertImageFromFile(file){if(!file)return;if(!/^image\//.test(file.type||'')){toast('Lütfen bir görsel dosyası seç.');return;}if(!pdfDoc){toast('Önce bir PDF aç.');return;}try{const dataUrl=await downscaleImageFile(file);const img=await loadImageElement(dataUrl);imageCache.set(dataUrl,img);const w=el.inkCanvas.clientWidth||1,h=el.inkCanvas.clientHeight||1;let wN=.45,hN=wN*(img.naturalHeight/Math.max(1,img.naturalWidth))*(w/Math.max(1,h));if(hN>.8){wN*=.8/hN;hN=.8;}if(wN>.92){hN*=.92/wN;wN=.92;}const item={kind:'image',src:dataUrl,x:(1-wN)/2,y:(1-hN)/2,w:wN,h:hN,opacity:1};snapshotForUndo();getStrokes().push(item);redrawInk();selectImage(item);markSaving();toast('Fotoğraf eklendi · sürükleyerek taşı, köşelerden boyutlandır.');}catch(error){console.error(error);toast('Görsel eklenemedi.');}}
 function dataUrlToBytes(dataUrl){const base64=dataUrl.slice(dataUrl.indexOf(',')+1);const bin=atob(base64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes;}
 function pointSegmentDistance(px,py,x1,y1,x2,y2){const dx=x2-x1,dy=y2-y1;const l2=dx*dx+dy*dy;if(!l2)return Math.hypot(px-x1,py-y1);const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
-function eraseAt(event){const p=normalizedPoint(event),w=el.inkCanvas.clientWidth,h=el.inkCanvas.clientHeight,radius=18;const list=getStrokes();for(let i=list.length-1;i>=0;i--){const pts=list[i].points||[];let hit=false;if(pts.length===1)hit=Math.hypot((p.x-pts[0].x)*w,(p.y-pts[0].y)*h)<radius;for(let j=1;j<pts.length&&!hit;j++)hit=pointSegmentDistance(p.x*w,p.y*h,pts[j-1].x*w,pts[j-1].y*h,pts[j].x*w,pts[j].y*h)<radius;if(hit){list.splice(i,1);break;}}redrawInk();}
+function eraseAt(event){const p=normalizedPoint(event),w=el.inkCanvas.clientWidth,h=el.inkCanvas.clientHeight,radius=18;const list=getStrokes();for(let i=list.length-1;i>=0;i--){const pts=list[i].points||[];let hit=false;if(pts.length===1)hit=Math.hypot((p.x-pts[0].x)*w,(p.y-pts[0].y)*h)<radius;for(let j=1;j<pts.length&&!hit;j++)hit=pointSegmentDistance(p.x*w,p.y*h,pts[j-1].x*w,pts[j-1].y*h,pts[j].x*w,pts[j].y*h)<radius;if(hit){list.splice(i,1);scheduleRedrawInk();break;}}}
 function startPan(event,captureTarget=el.inkCanvas){activePointer={id:event.pointerId,type:event.pointerType,mode:'pan'};dragOrigin={x:event.clientX,y:event.clientY,left:el.pageScroll.scrollLeft,top:el.pageScroll.scrollTop};el.paper.classList.add('dragging');try{captureTarget.setPointerCapture(event.pointerId);}catch(_){}event.preventDefault();}
 function startCrop(event,captureTarget=el.inkCanvas){const p=normalizedPoint(event);activePointer={id:event.pointerId,type:event.pointerType,mode:'crop'};cropStart={x:p.x,y:p.y};cropSelection={x:p.x,y:p.y,w:0,h:0};updateCropOverlay();try{captureTarget.setPointerCapture(event.pointerId);}catch(_){}event.preventDefault();}
 el.inkCanvas.addEventListener('pointerdown',event=>{
@@ -359,7 +362,7 @@ el.inkCanvas.addEventListener('pointermove',event=>{
   if(activePointer.mode==='crop'){moveCrop(event);event.preventDefault();return;}
   if(activePointer.mode==='shape'){moveShape(event);event.preventDefault();return;}
   if(activePointer.mode==='eraser'){eraseAt(event);event.preventDefault();return;}
-  if(currentStroke){const samples=event.getCoalescedEvents?.();if(samples?.length){for(const sample of samples)pushPoint(sample,currentStrokeRect);}else pushPoint(event,currentStrokeRect);predictedPoints=[];predictedFor=currentStroke;const predicted=event.getPredictedEvents?.();if(predicted?.length){for(const sample of predicted.slice(0,2)){try{predictedPoints.push(normalizedPoint(sample,currentStrokeRect));}catch(_){}}}redrawLiveInk();event.preventDefault();}
+  if(currentStroke){const samples=event.getCoalescedEvents?.();if(samples?.length){for(const sample of samples)pushPoint(sample,currentStrokeRect);}else pushPoint(event,currentStrokeRect);predictedPoints=[];predictedFor=currentStroke;const predicted=event.getPredictedEvents?.();if(predicted?.length){for(const sample of predicted.slice(0,2)){try{predictedPoints.push(normalizedPoint(sample,currentStrokeRect));}catch(_){}}}scheduleRedrawLive();event.preventDefault();}
 },{passive:false});
 function finishPointer(event){if(!activePointer||activePointer.id!==event.pointerId)return;const mode=activePointer.mode;if(mode==='shape'){finishShape(event);activePointer=null;dragOrigin=null;updateUndoButtons();try{el.inkCanvas.releasePointerCapture(event.pointerId);}catch(_){}return;}const wasDraw=mode==='pen'||mode==='highlighter'||mode==='eraser';if((mode==='pen'||mode==='highlighter')&&currentStroke){if(event.type==='pointerup')pushPoint(event,currentStrokeRect,true);commitStrokePreview();}if(event.type==='pointercancel'&&mode==='crop'){cropSelection=null;cropStart=null;updateCropOverlay();}else if(mode==='crop'){completeCrop();cropStart=null;}if(currentStroke&&mode!=='eraser'){currentStroke=null;currentStrokeRect=null;strokeStabilizerFilter=null;markSaving();}else if(wasDraw&&mode==='eraser'){markSaving();}if(mode==='pan')el.paper.classList.remove('dragging');activePointer=null;dragOrigin=null;updateUndoButtons();try{el.inkCanvas.releasePointerCapture(event.pointerId);}catch(_){} }
 el.inkCanvas.addEventListener('pointerup',finishPointer);el.inkCanvas.addEventListener('pointercancel',finishPointer);el.inkCanvas.addEventListener('lostpointercapture',event=>{if(activePointer?.id===event.pointerId){const mode=activePointer.mode;if(currentStroke&&mode!=='eraser'){commitStrokePreview();currentStroke=null;currentStrokeRect=null;strokeStabilizerFilter=null;markSaving();}activePointer=null;dragOrigin=null;el.paper.classList.remove('dragging');if(mode==='crop'){cropStart=null;cropSelection=null;updateCropOverlay();}}});el.paper.addEventListener('contextmenu',event=>event.preventDefault());el.inkCanvas.addEventListener('contextmenu',event=>event.preventDefault());
@@ -377,7 +380,7 @@ el.pageScroll.addEventListener('pointerup',handleTouchEnd,{passive:false});el.pa
 
 async function renderCurrentPage(){if(!pdfDoc)return;const version=++renderVersion;el.wait.style.display='flex';el.paper.style.visibility='hidden';if(renderTask){try{renderTask.cancel();}catch(_){}renderTask=null;}
   try{
-    const page=await pdfDoc.getPage(currentPage);if(version!==renderVersion)return;const base=page.getViewport({scale:1});const available=Math.max(280,el.pageScroll.clientWidth-70);const fit=Math.min(available/base.width,1.18);const scale=fit*zoomFactor;const viewport=page.getViewport({scale});const w=Math.round(viewport.width),h=Math.round(viewport.height),pixelArea=Math.max(1,w*h),nativeDpr=window.devicePixelRatio||1;dpr=Math.max(1,Math.min(nativeDpr,3,Math.sqrt(18000000/pixelArea)));/* Mürekkep katmanını 1x ekranlarda bile süperörnekle; katman başına ~16 MP sınırı (iOS canvas limiti altı). */inkDpr=Math.max(1,Math.min(4,Math.sqrt(16000000/pixelArea)));
+    const page=await pdfDoc.getPage(currentPage);if(version!==renderVersion)return;const base=page.getViewport({scale:1});const available=Math.max(280,el.pageScroll.clientWidth-70);const fit=Math.min(available/base.width,1.18);const scale=fit*zoomFactor;const viewport=page.getViewport({scale});const w=Math.round(viewport.width),h=Math.round(viewport.height),pixelArea=Math.max(1,w*h),nativeDpr=window.devicePixelRatio||1;const lowMem=(navigator.deviceMemory||8)<=4;dpr=Math.max(1,Math.min(nativeDpr,2,Math.sqrt(14000000/pixelArea)));/* Mürekkep süperörnekleme: akıcılık için doğru boyut (zayıf cihazlarda otomatik düşer). */inkDpr=Math.max(1,Math.min(lowMem?2.5:3,Math.sqrt((lowMem?7000000:10000000)/pixelArea)));
     el.paper.style.width=w+'px';el.paper.style.height=h+'px';
     el.pdfCanvas.width=Math.round(w*dpr);el.pdfCanvas.height=Math.round(h*dpr);el.pdfCanvas.style.width=w+'px';el.pdfCanvas.style.height=h+'px';
     for(const canvas of [el.inkCanvas,el.liveCanvas]){canvas.width=Math.round(w*inkDpr);canvas.height=Math.round(h*inkDpr);canvas.style.width=w+'px';canvas.style.height=h+'px';}
@@ -484,7 +487,7 @@ el.imageOverlay.addEventListener('pointerdown',event=>{if(!selectedImage)return;
 el.imageOverlay.addEventListener('pointermove',event=>{if(!imageGesture||imageGesture.id!==event.pointerId||!selectedImage)return;event.preventDefault();const g=imageGesture,o=g.orig,item=selectedImage,dx=(event.clientX-g.startX)/g.cw,dy=(event.clientY-g.startY)/g.ch;
 if(g.mode==='move'){item.x=Math.max(-o.w*.5,Math.min(1-o.w*.5,o.x+dx));item.y=Math.max(-o.h*.5,Math.min(1-o.h*.5,o.y+dy));}
 else{const aspect=o.h/Math.max(.0001,o.w),sx=g.handle.includes('l')?-1:1;const newW=Math.max(28/g.cw,Math.min(1.5,o.w+sx*dx)),newH=newW*aspect;item.w=newW;item.h=newH;item.x=g.handle.includes('l')?o.x+o.w-newW:o.x;item.y=g.handle.includes('t')?o.y+o.h-newH:o.y;}
-updateImageOverlay();redrawInk();});
+updateImageOverlay();scheduleRedrawInk();});
 function finishImageGesture(event){if(!imageGesture||imageGesture.id!==event.pointerId)return;imageGesture=null;markSaving();try{el.imageOverlay.releasePointerCapture(event.pointerId);}catch(_){}}
 el.imageOverlay.addEventListener('pointerup',finishImageGesture);el.imageOverlay.addEventListener('pointercancel',finishImageGesture);
 $('#imageDeleteBtn').addEventListener('click',()=>{if(!selectedImage)return;snapshotForUndo();const list=getStrokes(),index=list.indexOf(selectedImage);if(index>=0)list.splice(index,1);selectedImage=null;updateImageOverlay();redrawInk();markSaving();toast('Fotoğraf kaldırıldı.');});
@@ -778,6 +781,21 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 /* ---- Küçük ekran uyumu bozulmasın ---- */
 @media(max-width:1080px){.inspector.open{top:80px}}
 @media(max-width:760px){.topbar{height:70px;min-height:70px}.inspector.open{top:70px}}
+</style>
+<style>
+/* ============================================================
+   PERFORMANS KATMANI — akıcılık için GPU yükü azaltıldı
+   (büyük alan blur'ları kapalı, kanvas boyut animasyonu yok)
+   ============================================================ */
+.bottom-toolbar-dock{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.98)}
+.topbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(253,253,254,.985)}
+.stage-tip{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,255,255,.97)}
+.focus-ribbon{backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff}
+.toast{backdrop-filter:none;-webkit-backdrop-filter:none}
+.page-wait{backdrop-filter:none;-webkit-backdrop-filter:none}
+.drop-overlay{backdrop-filter:none;-webkit-backdrop-filter:none}
+.paper-wrap{transition:none}
+.stage{contain:layout paint}
 </style>
 </body>
 </html>
