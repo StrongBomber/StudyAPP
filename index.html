@@ -3,8 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f6f5f2">
+<meta name="theme-color" content="#f4f5f8">
 <title>Çözüm — PDF çalışma alanı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&display=swap">
 <style>
 :root{--bg:#f5f4f1;--panel:#fff;--ink:#222839;--muted:#858a99;--muted2:#a3a7b1;--line:#ececf0;--line2:#e4e5eb;--blue:#535de0;--blue-dark:#414bd0;--blue-soft:#f0f1ff;--lav:#f5f4ff;--green:#2d9a73;--green-soft:#eaf7f1;--amber:#edbc51;--shadow:0 12px 34px rgba(32,39,63,.11);--sidebar:248px;--inspector:296px;--radius:14px;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;--serif:Georgia,"Times New Roman",serif}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}button,input,textarea{font:inherit}button{color:inherit}svg.icon-defs{position:absolute;width:0;height:0;overflow:hidden}.icon{width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}.icon-sm{width:15px;height:15px}.icon-lg{width:20px;height:20px}
@@ -96,7 +99,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       </div>
       <div class="header-actions">
         <div class="save-state" id="saveState" aria-live="polite" aria-label="Kayıt hazırlanıyor"><svg class="icon"><use href="#i-check"/></svg><span id="saveText">Hazırlanıyor</span></div>
-        <button class="header-btn toggle-inspector" id="toggleInspector" style="display:none" aria-label="Çalışma panelini aç"><svg class="icon"><use href="#i-note"/></svg></button>
+        <button class="header-btn toggle-inspector" id="toggleInspector" title="Çalışma panelini aç/kapat" aria-label="Çalışma panelini aç/kapat"><svg class="icon"><use href="#i-note"/></svg></button>
         <button class="header-btn" id="exportBtn" title="İşaretlemeleri ekleyerek PDF indir" aria-label="İşaretlemeleri ekleyerek PDF indir"><svg class="icon"><use href="#i-download"/></svg><span class="button-label">PDF indir</span></button>
         <button class="header-btn primary" id="importBtn"><svg class="icon"><use href="#i-upload"/></svg><span class="button-label">PDF aç</span></button>
         <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
@@ -479,7 +482,7 @@ $('#importBtn').addEventListener('click',()=>$('#fileInput').click());$('#sideba
 $('#currentFileRow').addEventListener('click',()=>{if(documentId==='demo')openDemo();else toast('Açık belge zaten seçili.');});
 $('#pageNote').addEventListener('input',()=>{workState.notes[currentPage]=el.note.value;$('#noteSaveHint').textContent='Kaydediliyor…';markSaving();});
 el.taskList.addEventListener('click',event=>{const row=event.target.closest('.task-row');if(!row)return;const id=row.dataset.task;if(event.target.closest('.task-state')){workState.tasks[id]=!workState.tasks[id];if(workState.tasks[id])toast('Tamamlandı olarak işaretlendi.');updateProgress();markSaving();return;}activeTaskId=id;const page=Number(row.dataset.page);changePage(page);updateProgress();});
-$('#toggleInspector').addEventListener('click',()=>{if(el.inspector.classList.contains('open'))el.inspector.classList.remove('open');else el.inspector.classList.add('open');});$('#panelClose').addEventListener('click',closeInspector);
+$('#toggleInspector').addEventListener('click',()=>{if(window.innerWidth<=1080)el.inspector.classList.toggle('open');else el.workGrid.classList.toggle('assistant-collapsed');});$('#panelClose').addEventListener('click',closeInspector);
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('#sizePopover').hidden){setSizePopover(false);return;}const inField=event.target instanceof Element&&!!event.target.closest('input,textarea,select');if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'&&!inField){event.preventDefault();event.shiftKey?redo():undo();}else if(event.key==='ArrowLeft'&&!inField)changePage(currentPage-1);else if(event.key==='ArrowRight'&&!inField)changePage(currentPage+1);});window.addEventListener('resize',()=>{if(!$('#sizePopover').hidden)setSizePopover(false);});
 let observedScrollWidth=0,observedScrollHeight=0;const resizeObserver=new ResizeObserver(()=>{const rect=el.pageScroll.getBoundingClientRect();if(Math.abs(rect.width-observedScrollWidth)<.5&&Math.abs(rect.height-observedScrollHeight)<.5)return;observedScrollWidth=rect.width;observedScrollHeight=rect.height;if(pdfDoc)renderCurrentPage().then(()=>{if(isCropFocus&&cropSelection)afterPaperResize(()=>alignFocusedCrop(cropSelection));});});resizeObserver.observe(el.pageScroll);
 $('#mainArea').addEventListener('dragover',event=>{event.preventDefault();el.drop.classList.add('show');});$('#mainArea').addEventListener('dragleave',event=>{if(!$('#mainArea').contains(event.relatedTarget))el.drop.classList.remove('show');});$('#mainArea').addEventListener('drop',event=>{event.preventDefault();el.drop.classList.remove('show');const file=[...event.dataTransfer.files].find(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));if(file)loadFromFile(file);else toast('Buraya bir PDF bırakabilirsin.');});
@@ -624,6 +627,145 @@ input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user
 .img-handle.br{right:-9px;bottom:-9px;cursor:nwse-resize}
 .image-delete{position:absolute;top:-15px;right:-15px;width:27px;height:27px;border-radius:50%;border:none;background:#e1544f;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 10px rgba(205,60,60,.35)}
 .image-delete .icon{width:13px;height:13px;stroke:#fff}
+</style>
+<style>
+/* ============================================================
+   TASARIM YENİLEME — Figma / Goodnotes / Canva düzeyi cila
+   Tipografi, derinlik (gölge sistemi), mikro-etkileşimler.
+   ============================================================ */
+:root{
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --bg:#f3f4f7;--ink:#1d2332;--muted:#878da0;--line:#e9eaf0;
+  --blue:#5558e3;--blue-dark:#4347d6;--blue-soft:#eef0ff;
+  --sh-1:0 1px 2px rgba(23,28,48,.05),0 2px 8px rgba(23,28,48,.05);
+  --sh-2:0 2px 6px rgba(23,28,48,.06),0 12px 28px rgba(23,28,48,.10);
+  --sh-3:0 4px 14px rgba(23,28,48,.09),0 24px 60px rgba(23,28,48,.17);
+  --spring:cubic-bezier(.22,1,.36,1);
+}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-optical-sizing:auto;text-rendering:optimizeLegibility}
+::selection{background:#dfe1ff;color:#2b3056}
+button{-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid #8e94f1;outline-offset:2px}
+
+/* ---- Sol gezinme ---- */
+.sidebar{background:#f8f8fa;border-right:1px solid #e8e9ef;padding:22px 14px 15px}
+.brand{gap:11px;margin-bottom:30px}
+.brand-mark{width:36px;height:36px;border-radius:12px;background:linear-gradient(140deg,#6b6ff2,#4a50dd);box-shadow:0 2px 5px rgba(74,80,221,.28),0 8px 18px rgba(74,80,221,.22);transition:transform .25s var(--spring)}
+.brand:hover .brand-mark{transform:rotate(-6deg) scale(1.05)}
+.brand-name{font-family:var(--sans);font-size:20px;font-weight:800;letter-spacing:-.8px;color:#23283b}
+.brand-caption{font-size:8.5px;letter-spacing:1.6px;color:#a3a7b5;margin-top:3px}
+.nav-caption,.library-label span{color:#a8abba;font-weight:800}
+.nav-item{height:40px;border-radius:11px;font-weight:600;color:#767c8d;transition:background .18s,color .18s,transform .18s var(--spring)}
+.nav-item:hover{background:#eff0f4;transform:translateX(1px)}
+.nav-item.active{background:#e9ebff;color:#4347d6;box-shadow:inset 0 0 0 1px #dfe2ff}
+.week-card{border:1px solid #e5e6f8;border-radius:16px;background:linear-gradient(140deg,#f1f1ff,#fcfcff 72%);box-shadow:var(--sh-1)}
+.file-row{border-radius:11px;transition:background .16s,transform .18s var(--spring)}
+.file-row:hover{background:#efeff4;transform:translateX(1px)}
+.file-row.current{background:#e9ebff}
+.file-type{border-radius:9px;border-color:#e4e6f2;box-shadow:0 1px 2px rgba(23,28,48,.05)}
+.pencil-status{border-radius:13px;border-color:#e6e8f0;background:#f2f3f8}
+.profile{border-top-color:#e9eaf0}
+
+/* ---- Üst çubuk ---- */
+.topbar{height:80px;min-height:80px;background:rgba(252,252,254,.86);backdrop-filter:blur(16px) saturate(1.35);-webkit-backdrop-filter:blur(16px) saturate(1.35);border-bottom:1px solid #e8e9f0}
+.doc-cover{border-radius:9px;box-shadow:0 1px 3px rgba(23,28,48,.07)}
+.title-line h1{font-weight:700;letter-spacing:-.45px;color:#20263a}
+.crumb{letter-spacing:1.1px;color:#a6a9b7}
+.save-state{height:30px;display:flex;align-items:center;padding:0 11px 0 9px;border-radius:999px;background:#eef8f2;border:1px solid #ddefe5;color:#2f7d5c;font-weight:650;transition:background .25s,border-color .25s,color .25s}
+.save-state .icon{color:#35926b}
+.save-state.saving{background:#fdf6e8;border-color:#f3e6c8;color:#9a7a2e}
+.save-state.saving .icon{color:#c89b3c}
+.save-state.failed{background:#fdf1ef;border-color:#f5ddd8;color:#ad5147}
+.header-btn{height:38px;border-radius:11px;border-color:#e2e4ec;font-weight:650;box-shadow:0 1px 2px rgba(23,28,48,.04);transition:all .18s var(--spring)}
+.header-btn:hover{transform:translateY(-1px);box-shadow:var(--sh-1);border-color:#c9cdf0;background:#fbfbff}
+.header-btn:active{transform:translateY(0) scale(.97)}
+.header-btn.primary{background:linear-gradient(135deg,#6a6ff0,#4d53e0);border:0;box-shadow:0 1px 2px rgba(60,66,200,.25),0 7px 18px rgba(77,83,224,.32)}
+.header-btn.primary:hover{background:linear-gradient(135deg,#5f64ec,#4247da);box-shadow:0 2px 4px rgba(60,66,200,.28),0 10px 24px rgba(77,83,224,.38)}
+
+/* ---- Sayfa şeridi ---- */
+.page-strip{background:#fafafc;border-bottom:1px solid #ecedf2}
+.page-nav-btn{border-radius:8px;transition:background .15s,color .15s,transform .15s}
+.page-nav-btn:hover:not(:disabled){background:#e8eaff;color:#4a50dd}
+.page-nav-btn:active:not(:disabled){transform:scale(.9)}
+
+/* ---- Çalışma kanvası (Figma hissi) ---- */
+.stage{background-color:#e9ebef;background-image:radial-gradient(#d3d6de 1px,transparent 1px);background-size:22px 22px}
+.paper-wrap{border:0;border-radius:2px;box-shadow:0 0 0 1px rgba(23,28,48,.045),0 2px 6px rgba(23,28,48,.07),0 10px 24px rgba(23,28,48,.09),0 28px 64px rgba(23,28,48,.15)}
+.page-scroll{scrollbar-color:#c4c7d3 transparent}
+.page-scroll::-webkit-scrollbar{width:10px;height:10px}
+.page-scroll::-webkit-scrollbar-thumb{background:#c4c7d3;border:3px solid transparent;background-clip:padding-box;border-radius:20px}
+.page-scroll::-webkit-scrollbar-thumb:hover{background:#aaadbd;background-clip:padding-box}
+.stage-tip{border-radius:999px;border:1px solid rgba(228,229,238,.9);background:rgba(255,255,255,.92);backdrop-filter:blur(10px);box-shadow:var(--sh-1)}
+.drop-overlay{border:2px dashed #8e94f1;border-radius:22px;background:rgba(240,241,255,.95);backdrop-filter:blur(6px)}
+.page-wait{background:rgba(255,255,255,.92);backdrop-filter:blur(4px)}
+.spinner{border-color:#e2e4f2;border-top-color:#5558e3}
+.focus-ribbon{border-radius:12px;border-color:#e2e4f0;box-shadow:var(--sh-2)}
+.focus-ribbon button{border-radius:8px;transition:background .15s,transform .15s}
+.focus-ribbon button:active{transform:scale(.95)}
+
+/* ---- Alt yüzen araç doku (Canva hissi) ---- */
+.bottom-toolbar-dock{border:1px solid rgba(255,255,255,.75);border-radius:22px;background:rgba(255,255,255,.90);box-shadow:0 1px 2px rgba(23,28,48,.05),0 12px 28px rgba(23,28,48,.12),0 30px 80px rgba(23,28,48,.18);backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35)}
+.tool-button{border-radius:10px;color:#7b8191;transition:background .16s,color .16s,box-shadow .2s,transform .2s var(--spring)}
+.tool-button:hover{background:#eef0f6;color:#434a5e;transform:translateY(-1px)}
+.tool-button:active{transform:scale(.92)}
+.tool-button.active,.bottom-toolbar-dock .tool-button.active{background:linear-gradient(135deg,#666bee,#4b51de);color:#fff;box-shadow:0 2px 5px rgba(70,76,218,.30),0 6px 14px rgba(70,76,218,.28)}
+.tool-button.active:hover{color:#fff;transform:none}
+.tool-button:disabled{transform:none}
+.toolbar-divider{background:#e7e8f0}
+.color-button{width:18px;height:18px;box-shadow:0 0 0 1px rgba(23,28,48,.16),inset 0 -2px 3px rgba(0,0,0,.10);transition:transform .2s var(--spring),box-shadow .2s}
+.color-button:hover{transform:scale(1.2)}
+.color-button.selected,.color-button[aria-pressed="true"]{box-shadow:0 0 0 2px #fff,0 0 0 4px #5558e3;transform:scale(1.08)}
+.bottom-toolbar-dock .color-button{width:17px;height:17px}
+.size-select{background:#eff0f5;border-radius:9px}
+.size-button{border-radius:7px;transition:background .15s,color .15s}
+.size-button.selected{color:#4b51de}
+.custom-size-trigger{border-radius:9px;border-color:#e4e6ef;transition:all .16s}
+.width-preview{background:linear-gradient(135deg,#666bee,#4b51de)}
+.zoom-controls button{border-radius:8px;transition:background .15s,color .15s,transform .15s}
+.zoom-controls button:active{transform:scale(.9)}
+.pen-mode-group,.bottom-toolbar-dock .pen-mode-group{background:#eff0f5;border-color:#e7e8f0;border-radius:11px}
+.pen-mode-button{border-radius:9px;transition:background .18s,color .18s,box-shadow .2s}
+.pen-mode-button.active{box-shadow:0 1px 2px rgba(23,28,48,.08),0 3px 8px rgba(23,28,48,.08)}
+.stabilizer-control{border-radius:10px;border-color:#e4e6ef}
+.size-popover,.shape-popover{border-radius:16px;border-color:#e6e7f0;box-shadow:var(--sh-3)}
+.shape-option{border-radius:12px;transition:all .16s var(--spring)}
+.shape-option:hover{transform:translateY(-1px)}
+.shape-option.selected{border-color:#5558e3;background:#eaecff;box-shadow:0 0 0 1px #5558e3 inset}
+.shape-photo-button{border-radius:12px;transition:background .16s}
+
+/* ---- Kırpma / odak ---- */
+.crop-selection{border-color:#5558e3;box-shadow:0 0 0 9999px rgba(27,31,53,.34),0 0 0 4px rgba(85,88,227,.14)}
+.crop-label{background:linear-gradient(135deg,#666bee,#4b51de);border-radius:7px 7px 7px 2px;box-shadow:0 3px 10px rgba(60,66,200,.3)}
+.crop-corner{border-color:#4b51de}
+
+/* ---- Sağ panel ---- */
+.inspector{background:#fcfcfd;border-left:1px solid #e9eaf0}
+.inspector-title{font-weight:750;letter-spacing:-.2px}
+.head-icon{border-radius:8px;transition:background .15s,color .15s,transform .15s}
+.head-icon:active{transform:scale(.9)}
+.progress-block{border-radius:14px;border-color:#e9eaf6;background:linear-gradient(140deg,#f5f6ff,#fbfbff);box-shadow:var(--sh-1)}
+.progress-ring{background:conic-gradient(#5d62e8 0deg,#5d62e8 var(--progress,0deg),#e4e5f1 var(--progress,0deg),#e4e5f1 360deg)}
+.task-row{border-radius:11px;transition:background .15s,border-color .15s,transform .18s var(--spring)}
+.task-row:hover{transform:translateX(2px)}
+.task-row.active{background:#eef0ff;border-color:#e2e5ff}
+.task-index{border-radius:8px}
+.task-state{transition:background .18s,border-color .18s,transform .2s var(--spring)}
+.task-state:hover{transform:scale(1.12);border-color:#8e94f1}
+.task-state.done{background:#41a37c;border-color:#41a37c;animation:statePop .28s var(--spring)}
+@keyframes statePop{0%{transform:scale(.55)}60%{transform:scale(1.22)}100%{transform:scale(1)}}
+.notes-box textarea{border-radius:11px;transition:border-color .18s,box-shadow .18s}
+.notes-box textarea:focus{border-color:#a9aef5;box-shadow:0 0 0 3px #eef0ff}
+.tip-card{border-radius:12px}
+
+/* ---- Toast ---- */
+.toast{background:rgba(24,28,43,.94);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px 16px;box-shadow:0 10px 26px rgba(10,14,28,.32),0 24px 60px rgba(10,14,28,.25);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:.3s var(--spring)}
+.toast .icon{color:#8fe4bd}
+
+.toggle-inspector{display:flex!important;width:38px;padding:0}
+
+/* ---- Küçük ekran uyumu bozulmasın ---- */
+@media(max-width:1080px){.inspector.open{top:80px}}
+@media(max-width:760px){.topbar{height:70px;min-height:70px}.inspector.open{top:70px}}
 </style>
 </body>
 </html>
