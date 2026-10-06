@@ -157,7 +157,15 @@ export class PdfRenderer {
       try { await this.loadingTask.destroy(); } catch (_) { /* a superseded load may already be closed */ }
     }
     const data = bytes instanceof Uint8Array ? bytes.slice() : new Uint8Array(bytes.slice(0));
-    const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false, useWorkerFetch: false });
+    const loadingTask = pdfjs.getDocument({
+      data,
+      isEvalSupported: false,
+      useWorkerFetch: false,
+      cMapUrl: new URL('../vendor/cmaps/', import.meta.url).href,
+      cMapPacked: true,
+      standardFontDataUrl: new URL('../vendor/standard_fonts/', import.meta.url).href,
+      useSystemFonts: true,
+    });
     this.loadingTask = loadingTask;
     let nextDocument;
     try {
@@ -231,16 +239,14 @@ export class PdfRenderer {
     this.paper.dataset.page = String(this.pageNumber);
     this.paper.style.width = `${cssWidth}px`;
     this.paper.style.height = `${cssHeight}px`;
-    this.configureCanvas(this.pdfCanvas, cssWidth, cssHeight, pdfRatio);
+    // Let PDF.js start from an identity transform and apply the output scale once itself.
+    this.configureCanvas(this.pdfCanvas, cssWidth, cssHeight, pdfRatio, false);
     this.configureCanvas(this.inkCanvas, cssWidth, cssHeight, inkRatio);
     this.configureCanvas(this.liveCanvas, cssWidth, cssHeight, inkRatio);
     this.configureCanvas(this.predictedCanvas, cssWidth, cssHeight, inkRatio);
     this.clearLive();
 
     const context = this.pdfCanvas.getContext('2d', { alpha: false });
-    context.setTransform(pdfRatio, 0, 0, pdfRatio, 0, 0);
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, cssWidth, cssHeight);
     const task = page.render({
       canvasContext: context,
       viewport: pageViewport,
@@ -268,7 +274,7 @@ export class PdfRenderer {
     };
   }
 
-  configureCanvas(canvas, cssWidth, cssHeight, ratio) {
+  configureCanvas(canvas, cssWidth, cssHeight, ratio, applyScale = true) {
     const pixelWidth = Math.max(1, Math.round(cssWidth * ratio));
     const pixelHeight = Math.max(1, Math.round(cssHeight * ratio));
     canvas.style.width = `${cssWidth}px`;
@@ -278,7 +284,8 @@ export class PdfRenderer {
       canvas.height = pixelHeight;
     }
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (applyScale) ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    else ctx.setTransform(1, 0, 0, 1, 0, 0);
     return ctx;
   }
 
@@ -448,7 +455,6 @@ export class PdfRenderer {
     canvas.width = Math.round(viewport.width * ratio);
     canvas.height = Math.round(viewport.height * ratio);
     const ctx = canvas.getContext('2d', { alpha: false });
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     await page.render({ canvasContext: ctx, viewport, transform: [ratio, 0, 0, ratio, 0, 0], background: 'rgb(255,255,255)' }).promise;
     return { width: viewport.width, height: viewport.height };
   }

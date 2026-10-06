@@ -29,7 +29,7 @@ Bir statik HTTP sunucusu yeterlidir; derleme adımı yoktur:
 python3 -m http.server 8000
 ```
 
-Ardından `http://127.0.0.1:8000` adresini aç. PDF.js ES modülü ve worker'ı `.mjs` MIME türüyle sunulmalıdır; `file://` yerine HTTP/HTTPS kullan.
+Ardından `http://127.0.0.1:8000` adresini aç. PDF.js ES modülü ve worker'ı `.mjs` MIME türüyle sunulmalıdır; CMap ve standart font dizinlerini de `vendor/` altında tut. `file://` yerine HTTP/HTTPS kullan.
 
 ## InfinityFree'ye yükleme
 
@@ -52,6 +52,8 @@ vendor/
   pdf.min.mjs
   pdf.worker.min.mjs
   pdf-lib.min.js
+  cmaps/          # PDF.js karakter kümeleri
+  standard_fonts/ # gömülü olmayan standart fontlar
   *LICENSE*.txt
 ```
 

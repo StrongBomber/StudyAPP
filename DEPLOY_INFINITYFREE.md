@@ -24,6 +24,8 @@ htdocs/
     ├── pdf.min.mjs
     ├── pdf.worker.min.mjs
     ├── pdf-lib.min.js
+    ├── cmaps/                 ← PDF karakter kümeleri
+    ├── standard_fonts/        ← standart font dosyaları
     └── lisans dosyaları
 ```
 
@@ -40,7 +42,7 @@ Sertifika kurulmadan önce yönlendirme sorun çıkarırsa `.htaccess` içindeki
 ## 3. Yayından sonra kontrol
 
 - [ ] Ana sayfa açılıyor ve stiller yükleniyor
-- [ ] PDF.js dosyaları yükleniyor (`vendor/pdf.min.mjs` ve `vendor/pdf.worker.min.mjs`)
+- [ ] PDF.js motoru, worker'ı, `vendor/cmaps/` ve `vendor/standard_fonts/` dosyaları yükleniyor
 - [ ] **Örnek belgeyle dene** çalışıyor
 - [ ] Kendi PDF'in açılıyor ve sayfalar arasında geçiliyor
 - [ ] Apple Pencil 2 ile farklı basınçta ince/kalın çizgi; eğim ve açıyla dolma, fırça, kurşun ve keçeli kalem davranışı
@@ -55,7 +57,7 @@ Sertifika kurulmadan önce yönlendirme sorun çıkarırsa `.htaccess` içindeki
 | Belirti | Kontrol / çözüm |
 |---|---|
 | Boş sayfa veya stil yok | `styles.css` ve `src/` klasörünün tam yüklendiğini, ardından sert yenileme yaptığını doğrula. |
-| PDF yüklenmiyor | `.htaccess` içindeki `.mjs` MIME türünü ve `vendor/pdf.worker.min.mjs` dosyasının varlığını kontrol et. |
+| PDF yüklenmiyor | `.htaccess` içindeki `.mjs` MIME türünü ve `vendor/pdf.worker.min.mjs` dosyasını kontrol et. Yazılar/karakterler eksikse `vendor/cmaps/` ve `vendor/standard_fonts/` dizinlerinin eksiksiz yüklendiğini doğrula. |
 | Örnek belge yüklenmiyor | `assets/demo.pdf` dosyasının doğru dizinde olduğunu ve sunucunun PDF dosyalarını sunduğunu kontrol et. |
 | PDF indirilemiyor | `vendor/pdf-lib.min.js` dosyasını ve tarayıcının indirme engelini kontrol et. |
 | Kayıtlı belge görünmüyor | Aynı tarayıcı/profil ve normal pencereyi kullan; gizli mod kapandığında yerel veriler silinebilir. |
