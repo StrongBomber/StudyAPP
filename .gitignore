@@ -8,3 +8,7 @@ Thumbs.db
 *.zip
 build/
 dist/
+
+# Sunucu sırları: API anahtarlarını veya yerel ortam dosyalarını Git'e ekleme
+.env
+.env.*

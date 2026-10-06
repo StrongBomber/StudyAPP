@@ -14,53 +14,46 @@ function isCancellation(error) {
   return error?.name === 'RenderingCancelledException' || /cancelled/i.test(error?.message || '');
 }
 
-function angleDifference(from, to) {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
-}
-
-function previewPointError(point, start, end, width, height, pressureWeight, angleWeight) {
-  const ax = start.x * width, ay = start.y * height;
-  const bx = end.x * width, by = end.y * height;
-  const px = point.x * width, py = point.y * height;
-  const dx = bx - ax, dy = by - ay;
-  const lengthSquared = dx * dx + dy * dy;
-  const t = lengthSquared ? clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1) : 0;
-  const xError = px - (ax + dx * t);
-  const yError = py - (ay + dy * t);
-  const pressure = Math.abs((point.pressure ?? .5) - ((start.pressure ?? .5) + ((end.pressure ?? .5) - (start.pressure ?? .5)) * t)) * pressureWeight;
-  const angle = Math.abs(angleDifference(start.azimuthAngle || 0, point.azimuthAngle || 0)) * angleWeight;
-  return Math.hypot(xError, yError, pressure, angle);
-}
-
-function simplifyPreviewPoints(points, width, height, stroke, limit = 420) {
+function samplePreviewPoints(points, limit = 300, tailSize = 96) {
   if (points.length <= limit) return points;
-  const keep = new Uint8Array(points.length);
-  keep[0] = 1;
-  keep[points.length - 1] = 1;
-  const stack = [[0, points.length - 1]];
-  const tolerance = .72;
-  const pressureWeight = Math.max(2, (Number(stroke.size) || 2) * .55);
-  const angleWeight = Math.max(.5, (Number(stroke.size) || 2) * .08);
-  while (stack.length) {
-    const [first, last] = stack.pop();
-    if (last - first < 2) continue;
-    let greatestError = tolerance;
-    let greatestIndex = -1;
-    for (let index = first + 1; index < last; index += 1) {
-      const error = previewPointError(points[index], points[first], points[last], width, height, pressureWeight, angleWeight);
-      if (error > greatestError) { greatestError = error; greatestIndex = index; }
-    }
-    if (greatestIndex >= 0) {
-      keep[greatestIndex] = 1;
-      stack.push([first, greatestIndex], [greatestIndex, last]);
-    }
+  const split = Math.max(2, points.length - tailSize);
+  const prefixCount = limit - tailSize;
+  const preview = [];
+  for (let index = 0; index < prefixCount; index += 1) {
+    preview.push(points[Math.round(index * (split - 1) / (prefixCount - 1))]);
   }
-  const selected = [];
-  for (let index = 0; index < points.length; index += 1) if (keep[index]) selected.push(points[index]);
-  if (selected.length <= limit) return selected;
-  const reduced = [];
-  for (let index = 0; index < limit; index += 1) reduced.push(selected[Math.round(index * (selected.length - 1) / (limit - 1))]);
-  return reduced;
+  preview.push(...points.slice(split));
+  return preview;
+}
+
+function strokeBounds(stroke, width, height, scale) {
+  const points = stroke?.shape
+    ? [stroke.shape.start, stroke.shape.end]
+    : stroke?.points || [];
+  if (!points.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point.x * width);
+    minY = Math.min(minY, point.y * height);
+    maxX = Math.max(maxX, point.x * width);
+    maxY = Math.max(maxY, point.y * height);
+  }
+  const mode = stroke.mode || 'ink';
+  const factor = stroke.tool === 'highlighter' ? 3.5
+    : mode === 'marker' ? 1.8
+      : mode === 'fountain' || mode === 'brush' ? 2.5
+        : mode === 'pencil' ? 3.4 : 1.5;
+  const padding = Math.max(4, (Number(stroke.size) || 2) * scale * factor / 2 + 4);
+  const left = clamp(minX - padding, 0, width);
+  const top = clamp(minY - padding, 0, height);
+  const right = clamp(maxX + padding, 0, width);
+  const bottom = clamp(maxY + padding, 0, height);
+  return { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
+function clearBounds(context, bounds, width, height, full = false) {
+  if (full) context.clearRect(0, 0, width, height);
+  else if (bounds) context.clearRect(bounds.x, bounds.y, bounds.width, bounds.height);
 }
 
 function drawPencilGrain(ctx, outline, stroke, scale = 1) {
@@ -149,6 +142,8 @@ export class PdfRenderer {
     this.pageViewport = null;
     this.baseViewport = null;
     this.page = null;
+    this.liveBounds = null;
+    this.predictedBounds = null;
   }
 
   async open(bytes) {
@@ -231,6 +226,8 @@ export class PdfRenderer {
     const deviceRatio = window.devicePixelRatio || 1;
     const pdfRatio = Math.max(1, Math.min(deviceRatio, 2, Math.sqrt(12_000_000 / Math.max(1, area))));
     const inkRatio = Math.max(1, Math.min(deviceRatio, 2.5, Math.sqrt(9_000_000 / Math.max(1, area))));
+    const liveRatio = Math.max(1, Math.min(deviceRatio, 1.75, Math.sqrt(4_000_000 / Math.max(1, area))));
+    const predictedRatio = Math.max(1, Math.min(deviceRatio, 1.25, Math.sqrt(1_500_000 / Math.max(1, area))));
 
     this.page = page;
     this.baseViewport = baseViewport;
@@ -242,9 +239,9 @@ export class PdfRenderer {
     // Let PDF.js start from an identity transform and apply the output scale once itself.
     this.configureCanvas(this.pdfCanvas, cssWidth, cssHeight, pdfRatio, false);
     this.configureCanvas(this.inkCanvas, cssWidth, cssHeight, inkRatio);
-    this.configureCanvas(this.liveCanvas, cssWidth, cssHeight, inkRatio);
-    this.configureCanvas(this.predictedCanvas, cssWidth, cssHeight, inkRatio);
-    this.clearLive();
+    this.configureCanvas(this.liveCanvas, cssWidth, cssHeight, liveRatio);
+    this.configureCanvas(this.predictedCanvas, cssWidth, cssHeight, predictedRatio);
+    this.clearLive(true);
 
     const context = this.pdfCanvas.getContext('2d', { alpha: false });
     const task = page.render({
@@ -311,6 +308,25 @@ export class PdfRenderer {
     };
   }
 
+  async extractPageText(pageNumber = this.pageNumber, maxCharacters = 12_000) {
+    if (!this.pdfDocument) throw new Error('Önce bir PDF aç.');
+    const safePageNumber = clamp(Math.floor(Number(pageNumber) || 1), 1, this.pdfDocument.numPages);
+    const page = await this.pdfDocument.getPage(safePageNumber);
+    const content = await page.getTextContent();
+    const parts = [];
+    let characterCount = 0;
+    for (const item of content.items) {
+      if (typeof item.str !== 'string' || !item.str.length) continue;
+      const remaining = Math.max(0, maxCharacters - characterCount);
+      if (!remaining) break;
+      const part = item.str.slice(0, remaining);
+      parts.push(part);
+      characterCount += part.length + 1;
+      if (part.length < item.str.length) break;
+    }
+    return parts.join(' ').trim();
+  }
+
   drawAnnotations(strokes) {
     const ctx = this.inkCanvas.getContext('2d');
     const width = this.pageViewport?.width || 0;
@@ -330,31 +346,39 @@ export class PdfRenderer {
     const ctx = this.liveCanvas.getContext('2d');
     const width = this.pageViewport?.width || 0;
     const height = this.pageViewport?.height || 0;
-    ctx.clearRect(0, 0, width, height);
+    clearBounds(ctx, this.liveBounds, width, height);
+    this.liveBounds = null;
     if (!stroke || !width || !height) return;
-    // Keep live feedback bounded on long strokes; the saved/exported line still uses every Pencil sample.
-    const points = stroke.points?.length > 420
-      ? simplifyPreviewPoints(stroke.points, width, height, stroke)
-      : stroke.points;
-    this.drawStroke(ctx, points === stroke.points ? stroke : { ...stroke, points }, width, height, { preview: true });
+    // Bound the per-frame geometry and bounds work on long strokes; saved/exported strokes retain every Pencil sample.
+    const points = stroke.points?.length > 300 ? samplePreviewPoints(stroke.points) : stroke.points;
+    const previewStroke = points === stroke.points ? stroke : { ...stroke, points };
+    this.liveBounds = strokeBounds(previewStroke, width, height, this.pageViewport?.scale || 1);
+    this.drawStroke(ctx, previewStroke, width, height, { preview: true });
   }
 
   drawPredicted(stroke, predictedPoints = []) {
     const ctx = this.predictedCanvas.getContext('2d');
     const width = this.pageViewport?.width || 0;
     const height = this.pageViewport?.height || 0;
-    ctx.clearRect(0, 0, width, height);
-    if (!stroke || stroke.shape || !predictedPoints.length || !stroke.points?.length) return;
+    clearBounds(ctx, this.predictedBounds, width, height);
+    this.predictedBounds = null;
+    if (!stroke || stroke.shape || !predictedPoints.length || !stroke.points?.length || !width || !height) return;
     const previous = stroke.points[stroke.points.length - 1];
     const opacity = Number.isFinite(stroke.opacity) ? stroke.opacity : 1;
-    this.drawStroke(ctx, { ...stroke, opacity: opacity * .45, points: [previous, ...predictedPoints.slice(0, 3)] }, width, height, { preview: true, alpha: .72 });
+    const preview = { ...stroke, opacity: opacity * .45, points: [previous, ...predictedPoints.slice(0, 3)] };
+    this.predictedBounds = strokeBounds(preview, width, height, this.pageViewport?.scale || 1);
+    this.drawStroke(ctx, preview, width, height, { preview: true, alpha: .72 });
   }
 
-  clearLive() {
+  clearLive(full = false) {
     const width = this.pageViewport?.width || 0;
     const height = this.pageViewport?.height || 0;
-    this.liveCanvas.getContext('2d').clearRect(0, 0, width, height);
-    this.predictedCanvas.getContext('2d').clearRect(0, 0, width, height);
+    const liveContext = this.liveCanvas.getContext('2d');
+    const predictedContext = this.predictedCanvas.getContext('2d');
+    clearBounds(liveContext, this.liveBounds, width, height, full);
+    clearBounds(predictedContext, this.predictedBounds, width, height, full);
+    this.liveBounds = null;
+    this.predictedBounds = null;
   }
 
   drawStroke(ctx, stroke, width, height, { preview = false, alpha = 1 } = {}) {

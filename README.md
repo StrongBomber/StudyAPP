@@ -1,6 +1,6 @@
 # Çözüm — PDF çalışma alanı
 
-PDF soru bankaları ve ders notları üzerinde çalışmak için hazırlanmış, **iPadOS Safari ve Apple Pencil odaklı**, tamamen tarayıcıda çalışan bir çalışma alanı. Apple Pencil ile basınca duyarlı çiz; parmakla sayfayı taşı ve iki parmakla yakınlaştır. Veriler iPad'de kalır; sunucu, hesap, API veya API anahtarı gerekmez.
+PDF soru bankaları ve ders notları üzerinde çalışmak için hazırlanmış, **iPadOS Safari ve Apple Pencil 2 odaklı** bir çalışma alanı. Apple Pencil ile basınca duyarlı çiz; parmakla sayfayı taşı ve iki parmakla yakınlaştır. PDF'ler, çizimler ve notlar cihazda kalır. İsteğe bağlı AI öğretmeni sunucu tarafındaki PHP proxy'sini kullanır; NVIDIA anahtarı tarayıcıya gönderilmez ve PDF sayfa metni yalnızca kullanıcı açıkça paylaşmayı seçerse modele iletilir.
 
 ## Neler yapabilirsin?
 
@@ -15,21 +15,22 @@ PDF soru bankaları ve ders notları üzerinde çalışmak için hazırlanmış,
 - Apple Pencil gezinmesini destekleyen iPad'lerde uca göre şekillenen imleç önizlemesi görmek
 - Sayfaya görsel eklemek, sürükleyerek taşımak ve köşeden boyutlandırmak
 - Geri al / yinele ve klavye kısayolları
+- NVIDIA GLM-5.3-Flash ile AI çalışma asistanı; sohbet mesajları dışında PDF metni varsayılan olarak paylaşılmaz ve açık sayfanın metni ayrı bir onay kutusuyla seçilebilir
 - Her sayfaya bağlı not yazmak ve sayfaları tamamlandı olarak işaretlemek
 - Çizim ve şekilleri yeni PDF'e gömerek indirmek
 - En son açılan belgeyi, sayfayı ve ilerlemeyi otomatik geri yüklemek
 
-PDF'ler, çizimler, eklenen görseller ve notlar **tarayıcının IndexedDB alanında bu cihazda** saklanır. Dışarıya PDF veya not gönderen bir API ya da üçüncü taraf analitik yoktur. Tarayıcı verisini temizlemek veya belgeyi kenar çubuğundan kaldırmak kayıtları siler. Eski Çözüm sürümündeki yerel PDF, çizim ve notlar ilk açılışta yeni çalışma alanına aktarılır; kaynak kayıtlar aktarım sırasında silinmez.
+PDF'ler, çizimler, eklenen görseller ve notlar **tarayıcının IndexedDB alanında bu cihazda** saklanır. AI sohbetinde yazdığın mesajlar NVIDIA'nın API'sine sunucu proxy'si üzerinden gönderilir; PDF dosyası, çizimler ve sayfa notları gönderilmez. PDF sayfa metni de ancak AI panelindeki açık onay kutusunu seçtiğinde o isteğe eklenir. Sohbet geçmişi bu oturumda tutulur, cihazına kaydedilmez. AI proxy kötüye kullanımı önlemek için istemci IP'sini NVIDIA anahtarıyla HMAC'leyerek istek sayısını sınırlar; ham IP bu uygulamanın sayaç dosyasına yazılmaz. Tarayıcı verisini temizlemek veya belgeyi kenar çubuğundan kaldırmak yerel kayıtları siler. Eski Çözüm sürümündeki yerel PDF, çizim ve notlar ilk açılışta yeni çalışma alanına aktarılır; kaynak kayıtlar aktarım sırasında silinmez.
 
 ## Yerelde çalıştırma
 
-Bir statik HTTP sunucusu yeterlidir; derleme adımı yoktur:
+PDF çalışma alanı için derleme adımı gerekmez. Statik sunucuyla arayüz ve çizim araçları açılır; AI endpoint'inin çalışması için PHP 8+ (cURL etkin) gerekir:
 
 ```bash
-python3 -m http.server 8000
+php -S 0.0.0.0:8000 -t .
 ```
 
-Ardından `http://127.0.0.1:8000` adresini aç. PDF.js ES modülü ve worker'ı `.mjs` MIME türüyle sunulmalıdır; CMap ve standart font dizinlerini de `vendor/` altında tut. `file://` yerine HTTP/HTTPS kullan.
+Sunucuyu başlatmadan önce `NVIDIA_API_KEY` değişkenini PHP sürecine güvenli biçimde tanımla. Anahtarı komuta, dosyaya, tarayıcıya veya Git'e yazma. Bu değişken yoksa AI paneli yapılandırma hatası gösterir. Yalnızca statik dosya sunucusu kullanılırsa `api/chat.php` çalışmayacağından AI devre dışı kalır. PDF.js ES modülü ve worker'ı `.mjs` MIME türüyle sunulmalı; CMap ve standart font dizinleri `vendor/` altında bulunmalı. `file://` yerine HTTP/HTTPS kullan.
 
 ## InfinityFree'ye yükleme
 
@@ -62,8 +63,9 @@ Ayrıntılı kurulum ve kontrol listesi: [`DEPLOY_INFINITYFREE.md`](DEPLOY_INFIN
 ## Proje yapısı
 
 - `index.html` — erişilebilir uygulama iskeleti
-- `styles.css` — duyarlı, mobil uyumlu arayüz
-- `src/app.js` — etkileşimler, araçlar, otomatik kayıt ve sayfa ilerlemesi
+- `styles.css`, `src/ai.css` — duyarlı arayüz ve AI paneli stilleri
+- `src/app.js` — etkileşimler, araçlar, otomatik kayıt, AI sohbeti ve sayfa ilerlemesi
+- `api/chat.php` — NVIDIA anahtarını yalnızca sunucuda tutan, sınırlandırılmış AI proxy'si
 - `src/renderer.js` — PDF.js sayfa çizimi, Apple Pencil girişi ve kanvas katmanları
 - `src/stroke.js` — basınç/eğim duyarlı yumuşatılmış fırça geometrisi
 - `src/storage.js` — IndexedDB tabanlı yerel çalışma alanı

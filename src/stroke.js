@@ -25,7 +25,8 @@ export function pressureScale(stroke, pressure) {
     case 'pencil': return .22 + 1.2 * curve(1.08);
     case 'marker': return .68 + .46 * curve(.82);
     case 'highlighter': return .9 + .12 * curve(.8);
-    default: return .28 + 1.02 * curve(.92);
+    // The fine-line tip stays visibly connected even at the light touch pressure reported by Pencil.
+    default: return .48 + .86 * curve(.92);
   }
 }
 
@@ -224,11 +225,11 @@ export function createStrokeOutline(stroke, width, height, scale = 1) {
       if (totalLength > baseWidth * 1.35 && taperLength > .5) {
         const fadeIn = smoothstep(arcLength[index] / taperLength);
         const fadeOut = smoothstep((totalLength - arcLength[index]) / taperLength);
-        weight *= .22 + .78 * Math.min(fadeIn, fadeOut);
+        weight *= .42 + .58 * Math.min(fadeIn, fadeOut);
       }
     }
 
-    const radius = Math.max(.22, baseWidth * weight / 2);
+    const radius = Math.max(.275, baseWidth * weight / 2);
     if (mode === 'marker' || highlighter) {
       const nibAngle = effectiveNibAngle(point, stroke);
       const aspect = highlighter ? .13 : .2;

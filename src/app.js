@@ -15,6 +15,9 @@ const elements = {
   loading: $('#loadingOverlay'), loadingText: $('#loadingText'), viewerHint: $('#viewerHint'), exportButton: $('#exportButton'),
   saveStatus: $('#saveStatus'), saveStatusText: $('#saveStatusText'), panelToggle: $('#panelToggleButton'), panelClose: $('#panelCloseButton'),
   notesPanel: $('#notesPanel'), note: $('#pageNote'), notesDocumentName: $('#notesDocumentName'), notesPageContext: $('#notesPageContext'),
+  aiToggle: $('#aiToggleButton'), aiPanel: $('#aiPanel'), aiScrim: $('#aiScrim'), aiClose: $('#aiCloseButton'),
+  aiMessages: $('#aiMessages'), aiWelcome: $('#aiWelcome'), aiForm: $('#aiForm'), aiInput: $('#aiInput'), aiSend: $('#aiSendButton'),
+  aiSharePageText: $('#aiSharePageText'), aiShareStatus: $('#aiShareStatus'),
   completionButton: $('#completionButton'), completionTitle: $('#completionTitle'), completionSubtitle: $('#completionSubtitle'),
   completionCount: $('#completionCount'), completionMeter: $('#completionMeterFill'), undoButton: $('#undoButton'), redoButton: $('#redoButton'),
   toolButtons: [...document.querySelectorAll('[data-tool]')], brushTypeControl: $('#brushTypeControl'), brushType: $('#brushType'), shapePicker: $('#shapePicker'), shapeKind: $('#shapeKind'),
@@ -69,6 +72,11 @@ const state = {
   saveQueue: Promise.resolve(),
   metaQueue: Promise.resolve(),
   pageLoadToken: 0,
+  aiConversation: [],
+  aiBusy: false,
+  aiCloseTimer: 0,
+  aiRequestToken: 0,
+  aiAbortController: null,
   liveFrame: 0,
   inkFrame: 0,
   eraseFrame: 0,
@@ -146,6 +154,138 @@ function showToast(message, type = 'default', duration = 3400) {
   toast.append(icon, text);
   elements.toastRegion.append(toast);
   window.setTimeout(() => toast.remove(), duration);
+}
+
+function updateAIShareStatus() {
+  if (!state.document) {
+    elements.aiShareStatus.textContent = 'Önce bir PDF aç. Seçim yalnızca metni paylaşır.';
+  } else if (elements.aiSharePageText.checked) {
+    elements.aiShareStatus.textContent = `Bu gönderimde yalnızca açık sayfa (${state.pageNumber}) metin olarak paylaşılacak.`;
+  } else {
+    elements.aiShareStatus.textContent = 'Kapalı: PDF metni AI ile paylaşılmaz.';
+  }
+}
+
+function appendAIMessage(role, content, { error = false } = {}) {
+  elements.aiWelcome.hidden = true;
+  const row = document.createElement('div');
+  row.className = `ai-message-row is-${role}${error ? ' is-error' : ''}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'ai-bubble';
+  bubble.textContent = content;
+  row.append(bubble);
+  elements.aiMessages.append(row);
+  elements.aiMessages.scrollTop = elements.aiMessages.scrollHeight;
+}
+
+function setAIChatBusy(busy) {
+  state.aiBusy = busy;
+  elements.aiPanel.setAttribute('aria-busy', String(busy));
+  elements.aiSend.disabled = busy;
+  elements.aiSend.classList.toggle('is-loading', busy);
+  elements.aiInput.disabled = busy;
+  elements.aiSharePageText.disabled = busy || !state.document;
+}
+
+function clearAIConversation(resetConsent = false) {
+  state.aiRequestToken += 1;
+  state.aiAbortController?.abort();
+  state.aiAbortController = null;
+  setAIChatBusy(false);
+  state.aiConversation = [];
+  elements.aiMessages.replaceChildren(elements.aiWelcome);
+  elements.aiWelcome.hidden = false;
+  if (resetConsent) elements.aiSharePageText.checked = false;
+  updateAIShareStatus();
+}
+
+function setAIPanelOpen(open) {
+  window.clearTimeout(state.aiCloseTimer);
+  if (open) {
+    closeMobileOverlays();
+    elements.aiPanel.hidden = false;
+    elements.aiScrim.hidden = false;
+    elements.aiToggle.setAttribute('aria-expanded', 'true');
+    elements.aiToggle.setAttribute('aria-label', 'AI çalışma asistanını kapat');
+    requestAnimationFrame(() => {
+      if (elements.aiToggle.getAttribute('aria-expanded') === 'true') elements.aiPanel.classList.add('is-open');
+    });
+    window.setTimeout(() => {
+      if (elements.aiToggle.getAttribute('aria-expanded') === 'true') elements.aiInput.focus();
+    }, 180);
+    return;
+  }
+  elements.aiPanel.classList.remove('is-open');
+  elements.aiScrim.hidden = true;
+  elements.aiToggle.setAttribute('aria-expanded', 'false');
+  elements.aiToggle.setAttribute('aria-label', 'AI çalışma asistanını aç');
+  state.aiCloseTimer = window.setTimeout(() => { elements.aiPanel.hidden = true; }, 260);
+  elements.aiToggle.focus();
+}
+
+async function sendAIMessage(event) {
+  event.preventDefault();
+  if (state.aiBusy) return;
+  const prompt = elements.aiInput.value.trim();
+  if (!prompt) return;
+
+  const optedIntoPageText = elements.aiSharePageText.checked && Boolean(state.document);
+  const selectedDocumentId = state.document?.id || null;
+  const selectedPage = state.pageNumber;
+  const requestToken = ++state.aiRequestToken;
+  state.aiConversation.push({ role: 'user', content: prompt });
+  state.aiConversation = state.aiConversation.slice(-12);
+  appendAIMessage('user', prompt);
+  elements.aiInput.value = '';
+  setAIChatBusy(true);
+
+  try {
+    let pageText = '';
+    if (optedIntoPageText) {
+      pageText = await renderer.extractPageText(selectedPage, 10_000);
+      if (requestToken !== state.aiRequestToken) return;
+      if (state.document?.id !== selectedDocumentId || state.pageNumber !== selectedPage) {
+        throw new Error('PDF sayfası değişti. İsteğini yeni sayfada tekrar gönder.');
+      }
+      if (!pageText) {
+        throw new Error('Bu sayfada seçilebilir metin bulunamadı. Taranmış sayfayı kendin yazabilir veya paylaşımı kapatıp genel bir soru sorabilirsin.');
+      }
+    }
+
+    const controller = new AbortController();
+    state.aiAbortController = controller;
+    const requestBody = {
+      messages: state.aiConversation.slice(-12),
+      includePageText: optedIntoPageText,
+    };
+    if (optedIntoPageText) requestBody.pageText = `Sayfa ${selectedPage}:\n${pageText}`;
+
+    const response = await fetch(new URL('../api/chat.php', import.meta.url), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (requestToken !== state.aiRequestToken) return;
+    if (!response.ok) throw new Error(result.error || 'AI yanıt veremedi. Sunucu ayarlarını veya internet bağlantını kontrol et.');
+    const answer = typeof result.reply === 'string' ? result.reply.trim() : '';
+    if (!answer) throw new Error('AI boş yanıt verdi. Biraz sonra tekrar dene.');
+
+    state.aiConversation.push({ role: 'assistant', content: answer });
+    state.aiConversation = state.aiConversation.slice(-12);
+    appendAIMessage('assistant', answer);
+  } catch (error) {
+    if (requestToken !== state.aiRequestToken || error?.name === 'AbortError') return;
+    appendAIMessage('assistant', error?.message || 'AI yanıtı alınamadı. Lütfen tekrar dene.', { error: true });
+  } finally {
+    if (requestToken === state.aiRequestToken) {
+      state.aiAbortController = null;
+      setAIChatBusy(false);
+      if (elements.aiToggle.getAttribute('aria-expanded') === 'true') elements.aiInput.focus();
+    }
+  }
 }
 
 function setSaveState(mode) {
@@ -367,6 +507,9 @@ function updatePageUI() {
   elements.zoomIn.disabled = !enabled;
   elements.zoomOut.disabled = !enabled;
   elements.exportButton.disabled = !enabled;
+  elements.aiSharePageText.disabled = !enabled;
+  if (!enabled) elements.aiSharePageText.checked = false;
+  updateAIShareStatus();
   elements.documentPageLabel.textContent = enabled ? `Sayfa ${state.pageNumber} / ${total}` : 'Bir PDF açarak başla';
   elements.viewerHint.hidden = !enabled;
   elements.welcome.hidden = enabled;
@@ -459,6 +602,7 @@ async function navigateToPage(requestedPage, { updateDocument = true } = {}) {
 
 async function activateDocument(doc, bytes, { rendererAlreadyOpen = false, quiet = false } = {}) {
   await flushPageSave();
+  clearAIConversation(true);
   state.pageLoadToken += 1;
   state.document = { ...doc, completedPages: [...(doc.completedPages || [])] };
   state.bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -1116,7 +1260,7 @@ function addPoint(stroke, point, force = false) {
   if (previous) {
     const rect = state.pointerRect || elements.liveCanvas.getBoundingClientRect();
     const distance = Math.hypot((point.x - previous.x) * rect.width, (point.y - previous.y) * rect.height);
-    if (distance < .72) {
+    if (distance < .24) {
       previous.pressure = previous.pressure * .72 + point.pressure * .28;
       previous.tiltX = point.tiltX;
       previous.tiltY = point.tiltY;
@@ -1383,6 +1527,7 @@ async function removeDocument(id) {
   try {
     await store.deleteDocument(id);
     if (isCurrent) {
+      clearAIConversation(true);
       await renderer.close();
       state.pageLoadToken += 1;
       state.document = null;
@@ -1594,6 +1739,30 @@ function addEventListeners() {
   elements.exportButton.addEventListener('click', () => void exportCurrentPdf());
   elements.panelToggle.addEventListener('click', () => togglePanel());
   elements.panelClose.addEventListener('click', () => togglePanel(false));
+  elements.aiToggle.addEventListener('click', () => setAIPanelOpen(elements.aiToggle.getAttribute('aria-expanded') !== 'true'));
+  elements.aiClose.addEventListener('click', () => setAIPanelOpen(false));
+  elements.aiScrim.addEventListener('click', () => setAIPanelOpen(false));
+  elements.aiForm.addEventListener('submit', (event) => void sendAIMessage(event));
+  elements.aiSharePageText.addEventListener('change', updateAIShareStatus);
+  elements.aiInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      elements.aiForm.requestSubmit();
+    }
+  });
+  elements.aiPanel.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setAIPanelOpen(false);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...elements.aiPanel.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')];
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  });
   elements.mobileMenu.addEventListener('click', () => {
     const open = !elements.sidebar.classList.contains('is-open');
     elements.sidebar.classList.toggle('is-open', open);
